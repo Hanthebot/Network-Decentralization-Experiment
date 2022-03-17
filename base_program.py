@@ -6,6 +6,7 @@ from PIL import Image, ImageOps
 from datetime import datetime
 import os, time, traceback, string, random, pyautogui,sys
 import numpy as np
+import glob
 
 def mkIfNone(path):
     if not os.path.exists(path):
@@ -45,6 +46,7 @@ class beepSignals(QObject):
     data = pyqtSignal(str, object)
     beep = pyqtSignal(str, int)
     tim = pyqtSignal(float, float)
+    returnData = pyqtSignal(object,object)
 
 class responseSignal(QObject):
     data = pyqtSignal(str, object)
@@ -56,6 +58,7 @@ class mainToSignal(QObject):
     data = pyqtSignal(str, object)
     request = pyqtSignal(str, object)
     command = pyqtSignal(str, object)
+    returnData = pyqtSignal(object)
 
 class underTable(QWidget):
     def __init__(self, x=0, y=0, sabotage=False):
@@ -114,8 +117,8 @@ class underTable(QWidget):
         else:
             self.signals.data.emit(self.name, 404)
     
-    def returnData(self):
-        return self.data
+    def returnData(self, etc=""):
+        self.signals.returnData.emit((self.y,self.x), self.data)
 
 class cellTable(QTableWidget):
     def __init__(self):
@@ -202,9 +205,11 @@ class MyApp(QMainWindow):
                 bbtn = underTable(num, g)
                 bbtn.signals.data.connect(self.logUpdate)
                 bbtn.signals.beep.connect(self.receive_func)
+                bbtn.signals.returnData.connect(self.returnedData)
                 self.main_signal[g][num].request.connect(bbtn.receiveR)
                 self.main_signal[g][num].command.connect(bbtn.commandR)
                 self.main_signal[g][num].data.connect(bbtn.receiveD)
+                self.main_signal[g][num].returnData.connect(bbtn.returnData)
                 nBtn.setCellWidget(1,0, bbtn)
                 btns.addWidget(nBtn)
                 undButtons.append(nBtn)
@@ -212,6 +217,15 @@ class MyApp(QMainWindow):
             self.tables.append(btns)
         
         self.labels=['Admin','Manager','Node','User']
+        
+        self.wholeData = {
+            "table_data":{
+                "table_num": self.table_num,
+                "colNum": self.colNum
+                },
+            "cell_data":[[[] for x in range(self.colNum[g])] for g in range(self.table_num)],
+            "log_data":""
+        }
         
         for btns in self.tables:
             self.A.addLayout(btns)
@@ -247,6 +261,7 @@ class MyApp(QMainWindow):
         self.scrollArea.setWidget(self.logScr)
         self.Sc.addWidget(self.scrollArea)
         self.Sc.addWidget(self.Btn)
+        self.Sc.addWidget(self.BtnS)
         
         self.QQ.addLayout(self.A)
         self.QQ.addLayout(self.btnB)
@@ -342,29 +357,29 @@ class MyApp(QMainWindow):
         self.main_signal[num][-1].request.connect(bbtn.receiveR)
         self.main_signal[num][-1].command.connect(bbtn.commandR)
         self.main_signal[num][-1].data.connect(bbtn.receiveD)
+        self.main_signal[num][-1].returnData.connect(bbtn.returnData)
         nBtn.setCellWidget(1,0, bbtn)
         self.buttons[num].append(nBtn)
         self.tables[num].addWidget(nBtn)
+        self.wholeData['cell_data'][num].append([])
         self.logUpdate("Add",str(num))
     
+    def returnedData(self, coord, returnedData):
+        y,x = coord
+        self.wholeData["cell_data"][y][x] = returnedData
+        
     def save(self):
-        wholeData = {
-            "table_data":{
-                "table_num": self.table_num,
-                "colNum": self.colNum
-                },
-            "cell_data":[],
-            "log_data":self.logScr.text()
-        }
+        self.wholeData["log_data"] = self.logScr.text()
         for Y in range(self.table_num):
             yLis = []
             for X in range(self.colNum[Y]):
-                yLis.append(self.buttons[Y][X].item(1, 0).returnData())
-            wholeData["cell_data"].append(yLis)
-        sav = open("./data/{code}_"+time.strftime("%Y%m%d_%H%M%S"),"w")
-        sav.write(str(wholeData))
+                self.main_signal[Y][X].returnData.emit("")
+                #yLis.append(self.buttons[Y][X].itemAt(1, 0).returnData())
+            #self.wholeData["cell_data"].append(yLis)
+        sav = open(f"./data/{code}_"+time.strftime("%Y%m%d_%H%M%S")+".txt","w")
+        sav.write(str(self.wholeData))
         sav.close()
-        
+        self.logUpdate("Saved",time.strftime("%Y-%m-%d-%H:%M:%S"))
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
