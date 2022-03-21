@@ -6,7 +6,7 @@ from PIL import Image, ImageOps
 from datetime import datetime
 import os, time, traceback, string, random, pyautogui,sys
 import numpy as np
-import glob
+import glob, json
 
 def mkIfNone(path):
     if not os.path.exists(path):
@@ -19,10 +19,26 @@ def mkIfNone(path):
 
 mkIfNone("./data")
 
-code = sys.argv[1] if len(sys.argv) >1 else "default"
-if code in [G.replace("\"","'").replace(".txt","") for G in glob.glob("./data/*.txt")]:
+code = sys.argv[1].replace(".txt","") if len(sys.argv) >1 else "default"
+if os.path.exists("./data/"+code+".txt"):
     print("File already existing. Loading...")
-    load = True
+    fil = open("./data/"+code+".txt", 'r')
+    total_data = json.load(fil)
+    fil.close()
+    loading_data = total_data['table_data']
+    
+elif len(sys.argv) >1:
+    print("No file found. Continuing on default...")
+    loading_data = {
+        "table_num" : 4,
+        "colNum" : [3, 4, 5, 6]
+    }
+else:
+    print("No argument. Continuing on default...")
+    loading_data = {
+        "table_num" : 4,
+        "colNum" : [3, 4, 5, 6]
+    }
 
 def fo(a):    
     return "{0:.2f}".format(a).ljust(15)
@@ -170,10 +186,11 @@ class addBtnClass(QPushButton):
         self.addSignal.add.emit(self.num)
 
 class MyApp(QMainWindow):
-
-    def __init__(self):
+    def __init__(self,setup_data):
         super().__init__()
         self.Q=QWidget()
+        self.table_num = setup_data['table_num']
+        self.colNum = setup_data['colNum']
         self.setCentralWidget(self.Q)
         self.initUI()
         
@@ -189,9 +206,6 @@ class MyApp(QMainWindow):
         self.btnWhole=QHBoxLayout()
         self.time=QLabel("",self)
         
-        self.table_num = 4
-        #------------------------------------------------------------------------------------------------------------------------------------------
-        self.colNum = [3, 4, 5, 6]
         self.tables = []
         self.buttons = []
         self.main_signal = [[mainToSignal() for j in range(self.colNum[i])] for i in range(self.table_num)]
@@ -377,11 +391,11 @@ class MyApp(QMainWindow):
                 #yLis.append(self.buttons[Y][X].itemAt(1, 0).returnData())
             #self.wholeData["cell_data"].append(yLis)
         sav = open(f"./data/{code}_"+time.strftime("%Y%m%d_%H%M%S")+".txt","w")
-        sav.write(str(self.wholeData))
+        sav.write(str(self.wholeData).replace("'","\""))
         sav.close()
         self.logUpdate("Saved",time.strftime("%Y-%m-%d-%H:%M:%S"))
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
-    ex = MyApp()
+    ex = MyApp(loading_data)
     app.exec_()
