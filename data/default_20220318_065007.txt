@@ -1,1 +1,0 @@
-{'table_data': {'table_num': 4, 'colNum': [3, 5, 6, 6]}, 'cell_data': [[{}, {}, {}], [{}, {}, {}, {}, []], [{}, {}, {}, {}, {}, []], [{}, {}, {}, {}, {}, {}]], 'log_data': '<br>[06:50:02.68] Add: 1<br>[06:50:03.61] Add: 2<br>[06:50:04.66] Node_5: random text<br><span style="color:#808080">[06:50:05.77] system: Data updated</span>'}

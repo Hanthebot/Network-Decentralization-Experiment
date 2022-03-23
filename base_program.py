@@ -31,14 +31,14 @@ if os.path.exists("./data/"+code+".txt"):
 elif len(sys.argv) >1:
     print("No file found. Continuing on default...")
     loading_data = {
-        "table_num" : 4,
-        "colNum" : [3, 4, 5, 6]
+        "colNum" : [3, 4, 5, 6],
+        "permission":{'request': 3, 'receiveD': 3, 'receiveR': 3, 'commandR': 0, 'returnData': 3}
     }
 else:
     print("No argument. Continuing on default...")
     loading_data = {
-        "table_num" : 4,
-        "colNum" : [3, 4, 5, 6]
+        "colNum" : [3, 4, 5, 6],
+        "permission":{'request': 3, 'receiveD': 3, 'receiveR': 3, 'commandR': 0, 'returnData': 3}
     }
 
 def fo(a):    
@@ -90,11 +90,12 @@ class mainToSignal(QObject):
     returnData = pyqtSignal(object)
 
 class underTable(QWidget):
-    def __init__(self, x=0, y=0, sabotage=False):
+    def __init__(self, x=0, y=0, permission={}, sabotage=False):
         super().__init__()
         self.x = x
         self.y = y
-        self.labels=['Admin','Manager','Node','User']
+        self.permission = permission
+        self.labels = ['Admin','Manager','Node','User']
         self.name = f"{self.labels[self.y]}_{self.x}"
         self.layouta = QHBoxLayout()
         self.nBtn1=QPushButton("A") #request?
@@ -123,34 +124,53 @@ class underTable(QWidget):
         self.signals.beep.emit(self.name,2)
         
     def request(self, fileName):
-        self.signals.request.emit(self.name, [fileName, {"req_from":self.name, "req_at":time.time()}])
+        if self.y <= self.permission[self.request.__name__]:
+            self.signals.request.emit(self.name, [fileName, {"req_from":self.name, "req_at":time.time()}])
+        else:
+            self.signals.data.emit(self.name, "No permission")
     
     def receiveD(self, dataR):
-        fileName, data, meta = dataR
-        self.data[fileName] = data
-        #signal emit time done
+        if self.y <= self.permission[self.receiveD.__name__]:
+            fileName, data, meta = dataR
+            self.data[fileName] = data
+            #signal emit time done
+        else:
+            self.signals.data.emit(self.name, "No permission")
     
     def receiveR(self, dataReq):
-        fileName, meta = dataReq
-        #check permision if needed
-        if fileName in self.data.keys():
-            self.signals.data.emit(self.name, [fileName, self.data[fileName], {"dat_from":self.name, "dat_at":time.time()}])
+        if self.y <= self.permission[self.receiveR.__name__]:
+            fileName, meta = dataReq
+            #check permision if needed
+            if fileName in self.data.keys():
+                self.signals.data.emit(self.name, [fileName, self.data[fileName], {"dat_from":self.name, "dat_at":time.time()}])
+            else:
+                self.signals.data.emit(self.name, 404)
         else:
-            self.signals.data.emit(self.name, 404)
+            self.signals.data.emit(self.name, "No permission")
     
     def commandR(self, command, arg=""):
-        if command == 'upload':
-            if arg.split(".")[-1].lower() in ['png','jpg','jpeg','gif']:
-                f = Image.open(arg,"r")
-                self.data[arg] = f
+        if self.y <= self.permission[self.commandR.__name__]:
+            if command == 'upload':
+                file_name = arg
+                if arg.split(".")[-1].lower() in ['png','jpg','jpeg','gif']:
+                    f = Image.open(arg,"r")
+                    self.data[arg] = f
+                    self.signals.data.emit(self.name, f"{arg} uploaded successfully")
+                else:
+                    f = open(arg,"r")
+                    self.data[arg] = f.read()
+                    f.close()
+                    self.signals.data.emit(self.name, "D")
             else:
-                f = open(arg,"r")
-                self.data[arg] = f.read()
-                f.close()
-            self.signals.data.emit(self.name, 1)
+                self.signals.data.emit(self.name, "No command found")
+        else:
+            self.signals.data.emit(self.name, "No permission")
     
     def returnData(self, etc=""):
-        self.signals.returnData.emit((self.y,self.x), self.data)
+        if self.y <= self.permission[self.returnData.__name__]:
+            self.signals.returnData.emit((self.y,self.x), self.data)
+        else:
+            self.signals.data.emit(self.name, "No permission")
 
 class cellTable(QTableWidget):
     def __init__(self):
@@ -202,12 +222,12 @@ class addBtnClass(QPushButton):
         self.addSignal.add.emit(self.num)
 
 class MyApp(QMainWindow):
-    global code
     def __init__(self,setup_data):
         super().__init__()
         self.Q=QWidget()
         self.colNum = setup_data['colNum']
         self.table_num = len(setup_data['colNum'])
+        self.permission = setup_data['permission']
         self.setCentralWidget(self.Q)
         self.initUI()
         
@@ -231,10 +251,10 @@ class MyApp(QMainWindow):
             btns=QHBoxLayout()
             undButtons = []
             for num in range(self.colNum[g]):
-                nBtn=cellTable()
-                cell=cellCol(num, g)
+                nBtn = cellTable()
+                cell = cellCol(num, g)
                 nBtn.setItem(0,0, cell)
-                bbtn = underTable(num, g)
+                bbtn = underTable(num, g, self.permission)
                 bbtn.signals.data.connect(self.logUpdate)
                 bbtn.signals.beep.connect(self.receive_func)
                 bbtn.signals.returnData.connect(self.returnedData)
@@ -252,7 +272,8 @@ class MyApp(QMainWindow):
         
         self.wholeData = {
             "table_data":{
-                "colNum": self.colNum
+                "colNum": self.colNum,
+                "permission":self.permission
                 },
             "cell_data":[[[] for x in range(self.colNum[g])] for g in range(self.table_num)],
             "log_data":""
@@ -276,10 +297,10 @@ class MyApp(QMainWindow):
         self.A.addWidget(self.commandText)
         
         self.scrollWidth = 250
-        self.Btn=QPushButton("refresh", self)
+        self.Btn = QPushButton("refresh", self)
         self.Btn.clicked.connect(self.box)
         self.Btn.setMaximumWidth(self.scrollWidth)
-        self.BtnS=QPushButton("save", self)
+        self.BtnS = QPushButton("save", self)
         self.BtnS.clicked.connect(self.save)
         shortcut = QShortcut(QKeySequence("Ctrl+S"), self)
         shortcut.activated.connect(self.save)
@@ -288,7 +309,7 @@ class MyApp(QMainWindow):
         self.scrollArea.setMaximumWidth(self.scrollWidth)
         self.scrollArea.setWidgetResizable(True)
         self.scrollArea.verticalScrollBar().rangeChanged.connect(self.moveToEnd)
-        self.logScr=QLabel(self)
+        self.logScr = QLabel(self)
         self.logScr.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.logScr.setWordWrap(True)
         self.scrollArea.setWidget(self.logScr)
@@ -359,6 +380,7 @@ class MyApp(QMainWindow):
         self.prompt(text)
     
     def prompt(self, command):
+        self.logUpdate("Command", command, '')
         cwords = command.split(" ")
         if len(cwords) > 1:
             if '#' in cwords[1]: #have a target node
@@ -393,7 +415,6 @@ class MyApp(QMainWindow):
                 pass
             else:
                 self.logUpdate("Command", "No command found", '')
-        self.logUpdate("Command", command, '')
         pass
     
     def receive_func(self, name, func_id):
