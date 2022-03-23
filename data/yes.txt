@@ -1,0 +1,1 @@
+{"table_data": {"colNum": [3, 4]}, "cell_data": [[{}, {}, {}], [{}, {}, {}, {}], [{}, {}, {}, {}, {}], [{}, {}, {}, {}, {}, {}]], "log_data": [["07:58:37.53", "system", "structure code -> yes"], ["07:58:37.54", "Command", "setname yes"]]}

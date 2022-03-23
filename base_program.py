@@ -1,5 +1,5 @@
-from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QDesktopWidget, QPushButton, QComboBox, QTableWidget, QTableWidgetItem, QHeaderView,QScrollArea, QMainWindow
-from PyQt5.QtGui import QFont, QColor, QBrush
+from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QDesktopWidget, QPushButton, QComboBox, QTableWidget, QTableWidgetItem, QHeaderView,QScrollArea, QMainWindow, QShortcut
+from PyQt5.QtGui import QFont, QColor, QBrush, QKeySequence
 from PyQt5.QtCore import Qt, QObject, pyqtSignal
 from functools import partial
 from PIL import Image, ImageOps
@@ -19,6 +19,7 @@ def mkIfNone(path):
 
 mkIfNone("./data")
 
+gray = '808080'
 code = sys.argv[1].replace(".txt","") if len(sys.argv) >1 else "default"
 if os.path.exists("./data/"+code+".txt"):
     print("File already existing. Loading...")
@@ -57,6 +58,18 @@ def fo3(a):
 
 def fo4(a):    
     return "{0:.6f}".format(a).ljust(len("{0:.6f}".format(a)))
+
+def returnNum(a):
+    if a.lower() in ['admin', 'a']:
+        return 0
+    elif a.lower() in ['manager', 'm']:
+        return 1
+    elif a.lower() in ['node', 'n']:
+        return 2
+    elif a.lower() in ['user', 'u']:
+        return 3
+    else:
+        return 5
 
 class beepSignals(QObject):
     data = pyqtSignal(str, object)
@@ -125,13 +138,16 @@ class underTable(QWidget):
         else:
             self.signals.data.emit(self.name, 404)
     
-    def commandR(self, dataReq):
-        fileName, meta = dataReq
-        #check permision if needed
-        if fileName in self.data.keys():
-            self.signals.data.emit(self.name, [fileName, self.data[fileName], {"dat_from":self.name, "dat_at":time.time()}])
-        else:
-            self.signals.data.emit(self.name, 404)
+    def commandR(self, command, arg=""):
+        if command == 'upload':
+            if arg.split(".")[-1].lower() in ['png','jpg','jpeg','gif']:
+                f = Image.open(arg,"r")
+                self.data[arg] = f
+            else:
+                f = open(arg,"r")
+                self.data[arg] = f.read()
+                f.close()
+            self.signals.data.emit(self.name, 1)
     
     def returnData(self, etc=""):
         self.signals.returnData.emit((self.y,self.x), self.data)
@@ -186,11 +202,12 @@ class addBtnClass(QPushButton):
         self.addSignal.add.emit(self.num)
 
 class MyApp(QMainWindow):
+    global code
     def __init__(self,setup_data):
         super().__init__()
         self.Q=QWidget()
-        self.table_num = setup_data['table_num']
         self.colNum = setup_data['colNum']
+        self.table_num = len(setup_data['colNum'])
         self.setCentralWidget(self.Q)
         self.initUI()
         
@@ -205,6 +222,7 @@ class MyApp(QMainWindow):
         self.btnB=QVBoxLayout()
         self.btnWhole=QHBoxLayout()
         self.time=QLabel("",self)
+        self.logList=[]
         
         self.tables = []
         self.buttons = []
@@ -220,10 +238,10 @@ class MyApp(QMainWindow):
                 bbtn.signals.data.connect(self.logUpdate)
                 bbtn.signals.beep.connect(self.receive_func)
                 bbtn.signals.returnData.connect(self.returnedData)
-                self.main_signal[g][num].request.connect(bbtn.receiveR)
-                self.main_signal[g][num].command.connect(bbtn.commandR)
-                self.main_signal[g][num].data.connect(bbtn.receiveD)
-                self.main_signal[g][num].returnData.connect(bbtn.returnData)
+                self.main_signal[g][num].request.connect(bbtn.receiveR) #for receiving request
+                self.main_signal[g][num].command.connect(bbtn.commandR) #uploading
+                self.main_signal[g][num].data.connect(bbtn.receiveD) #for sending out data
+                self.main_signal[g][num].returnData.connect(bbtn.returnData) #for save
                 nBtn.setCellWidget(1,0, bbtn)
                 btns.addWidget(nBtn)
                 undButtons.append(nBtn)
@@ -234,7 +252,6 @@ class MyApp(QMainWindow):
         
         self.wholeData = {
             "table_data":{
-                "table_num": self.table_num,
                 "colNum": self.colNum
                 },
             "cell_data":[[[] for x in range(self.colNum[g])] for g in range(self.table_num)],
@@ -264,6 +281,8 @@ class MyApp(QMainWindow):
         self.Btn.setMaximumWidth(self.scrollWidth)
         self.BtnS=QPushButton("save", self)
         self.BtnS.clicked.connect(self.save)
+        shortcut = QShortcut(QKeySequence("Ctrl+S"), self)
+        shortcut.activated.connect(self.save)
         self.BtnS.setMaximumWidth(self.scrollWidth)
         self.scrollArea = QScrollArea()
         self.scrollArea.setMaximumWidth(self.scrollWidth)
@@ -284,7 +303,7 @@ class MyApp(QMainWindow):
         self.statusBar().addPermanentWidget(self.time,0)
         self.Q.setLayout(self.QQ)
         self.setGeometry(300,300,1000,500)
-        self.setWindowTitle("Network Simulation")
+        self.setWindowTitle(f"Network Simulation -{code}")
         self.center()
         self.show()
     
@@ -315,7 +334,7 @@ class MyApp(QMainWindow):
             txt+=" ".join(xls)+"\n"
         self.ti="time spent: "+fo2(time.time()-t)+"s"
         self.result=txt
-        self.logUpdate("system", "Data updated", '808080')
+        self.logUpdate("System", "Data updated", gray)
     
     def moveToEnd(self):
         self.scrollArea.verticalScrollBar().setValue(self.scrollArea.verticalScrollBar().maximum())
@@ -331,6 +350,7 @@ class MyApp(QMainWindow):
             logText += f"[{datetime.now().strftime('%H:%M:%S.%f')[:-4]}] {name}: {string}"
         addText = f"[{datetime.now().strftime('%H:%M:%S.%f')[:-4]}] {name}: {string}"
         print(addText)
+        self.logList.append([datetime.now().strftime('%H:%M:%S.%f')[:-4], name, string])
         self.logScr.setText(logText)
     
     def entered(self):
@@ -343,12 +363,36 @@ class MyApp(QMainWindow):
         if len(cwords) > 1:
             if '#' in cwords[1]: #have a target node
                 target = cwords[1].split('#')
-                target = [self.labels.index(target[0]), int(target[1])]
-                if cwords[0] == '':
+                target = [returnNum(target[0]), int(target[1])]
+                if cwords[0].lower() == 'upload':
+                    fil_name = " ".join(cwords[2:])
+                    self.main_signal[target[0]][target[1]].command.emit('upload',fil_name) #upload file
+                elif cwords[0].lower() == 'up_and_down':
+                    lenLog = len(self.logList) #
+                    self.main_signal[target[0]][target[1]].command.emit('upload',fil_name) #upload file
+                    i=0
+                    up = False
+                    while i < 50:
+                        for li in logList[lenLog:]:
+                            if "uploaded "+fil_name in li:
+                                up = True
+                                break
+                        time.sleep(0.1)
+                elif cwords[0] == 'request':
                     pass
+                else:
+                    self.logUpdate("Command", "No command found", '')
+            else:
+                if cwords[0].lower() == 'setname':
+                    global code
+                    code = " ".join(cwords[1:])
+                    self.setWindowTitle(f"Network Simulation -{code}")
+                    self.logUpdate("System", f"structure code -> {code}", gray)
         else:
-            if command == '':
+            if command.lower() == '':
                 pass
+            else:
+                self.logUpdate("Command", "No command found", '')
         self.logUpdate("Command", command, '')
         pass
     
@@ -376,14 +420,14 @@ class MyApp(QMainWindow):
         self.buttons[num].append(nBtn)
         self.tables[num].addWidget(nBtn)
         self.wholeData['cell_data'][num].append([])
-        self.logUpdate("Add",str(num))
+        self.logUpdate("Added",self.labels[num])
     
     def returnedData(self, coord, returnedData):
         y,x = coord
         self.wholeData["cell_data"][y][x] = returnedData
         
     def save(self):
-        self.wholeData["log_data"] = self.logScr.text()
+        self.wholeData["log_data"] = self.logList
         for Y in range(self.table_num):
             yLis = []
             for X in range(self.colNum[Y]):
