@@ -1,12 +1,10 @@
-from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QDesktopWidget, QPushButton, QComboBox, QTableWidget, QTableWidgetItem, QHeaderView,QScrollArea, QMainWindow, QShortcut
+from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QDesktopWidget, QPushButton, QComboBox, QTableWidget, QTableWidgetItem, QHeaderView, QScrollArea, QMainWindow, QShortcut
 from PyQt5.QtGui import QFont, QColor, QBrush, QKeySequence
 from PyQt5.QtCore import Qt, QObject, pyqtSignal
-from functools import partial
 from PIL import Image, ImageOps
 from datetime import datetime
-import os, time, traceback, string, random, pyautogui,sys
+import os, time, traceback, random, sys, glob, json, random
 import numpy as np
-import glob, json
 
 def mkIfNone(path):
     if not os.path.exists(path):
@@ -27,19 +25,24 @@ if os.path.exists("./data/"+code+".txt"):
     total_data = json.load(fil)
     fil.close()
     loading_data = total_data['table_data']
+    log_dt = total_data['log_data']
     
 elif len(sys.argv) >1:
     print("No file found. Continuing on default...")
     loading_data = {
         "colNum" : [3, 4, 5, 6],
-        "permission":{'request': 3, 'receiveD': 3, 'receiveR': 3, 'commandR': 0, 'returnData': 3}
+        "permission":{'self-request': 3, 'receiveD': 3, 'request': 3, 'upload': 0},
+        "data_provider":[0,0,0,0]
     }
+    log_dt = []
 else:
     print("No argument. Continuing on default...")
     loading_data = {
         "colNum" : [3, 4, 5, 6],
-        "permission":{'request': 3, 'receiveD': 3, 'receiveR': 3, 'commandR': 0, 'returnData': 3}
+        "permission":{'self-request': 3, 'receiveD': 3, 'request': 3, 'upload': 0},
+        "data_provider":[0,0,0,0]
     }
+    log_dt = []
 
 def fo(a):    
     return "{0:.2f}".format(a).ljust(15)
@@ -71,22 +74,44 @@ def returnNum(a):
     else:
         return 5
 
-class beepSignals(QObject):
-    data = pyqtSignal(str, object)
-    beep = pyqtSignal(str, int)
-    tim = pyqtSignal(float, float)
-    returnData = pyqtSignal(object,object)
+def nameSplitter(name):
+    if "#" in name:
+        clas, id_num = name.split("#")
+        clas = returnNum(clas)
+        id_num = int(id_num)
+    elif "_" in name:
+        clas, id_num = name.split("_")
+        clas = returnNum(clas)
+        id_num = int(id_num)
+    else:
+        clas, id_num (-1, -1)
+    
+    return (clas, id_num)
 
-class responseSignal(QObject):
-    data = pyqtSignal(str, object)
+def nameMaker(x,y):
+    labels = ['Admin', 'Manager', 'Node', 'User']
+    return f"{labels[y]}_{x}"
+
+class dataFormat():
+    def __init__(self, name='', function='', log='', t=0):
+        self.name = name
+        self.function = function
+        self.log = log
+        self.time = t
+        self.meta = {}
+
+class beepSignals(QObject):
+    data = pyqtSignal(object)
+    beep = pyqtSignal(str, int)
+    request = pyqtSignal(object)
+    returnData = pyqtSignal(object,object)
 
 class addSignal(QObject):
     add = pyqtSignal(int)
 
 class mainToSignal(QObject):
-    data = pyqtSignal(str, object)
-    request = pyqtSignal(str, object)
-    command = pyqtSignal(str, object)
+    data = pyqtSignal(object)
+    command = pyqtSignal(object)
     returnData = pyqtSignal(object)
 
 class underTable(QWidget):
@@ -94,12 +119,13 @@ class underTable(QWidget):
         super().__init__()
         self.x = x
         self.y = y
+        self.born = time.time()
         self.permission = permission
-        self.labels = ['Admin','Manager','Node','User']
-        self.name = f"{self.labels[self.y]}_{self.x}"
+        self.labels = ['Admin', 'Manager', 'Node', 'User']
+        self.name = nameMaker(self.x, self.y)
         self.layouta = QHBoxLayout()
-        self.nBtn1=QPushButton("A") #request?
-        self.nBtn2=QPushButton("S") #send_message
+        self.nBtn1=QPushButton("A") #age
+        self.nBtn2=QPushButton("F") #send_keys
         self.nBtn3=QPushButton("P") #Paralyze
         for nnn in [self.nBtn1, self.nBtn2, self.nBtn3]:
             nnn.setMaximumHeight(20)
@@ -114,63 +140,102 @@ class underTable(QWidget):
         self.signals = beepSignals()
         self.data = {}
         
-    def btn1_clicked(self):
-        self.signals.data.emit(self.name, str(random.randint(10000,99999)))
+    def btn1_clicked(self): #return age
+        ret = dataFormat(self.name, self.btn1_clicked.__name__)
+        age = time.time()-self.born
+        ret.log = f"Age: {fo2(age)}s"
+        ret.meta['born'] = self.born
+        ret.meta['age'] = age
+        ret.time = time.time()
+        self.signals.data.emit(ret)
         
-    def btn2_clicked(self):
-        self.signals.beep.emit(self.name,1)
+    def btn2_clicked(self): #get file names
+        ret = dataFormat(self.name, self.btn2_clicked.__name__)
+        keys = list(self.data.keys())
+        ret.log = f"Files: {', '.join(keys)}"
+        ret.meta['files'] = keys
+        ret.time = time.time()
+        self.signals.data.emit(ret)
         
-    def btn3_clicked(self):
-        self.signals.beep.emit(self.name,2)
+    def btn3_clicked(self): #paralyze
+        pass
         
-    def request(self, fileName):
-        if self.y <= self.permission[self.request.__name__]:
-            self.signals.request.emit(self.name, [fileName, {"req_from":self.name, "req_at":time.time()}])
-        else:
-            self.signals.data.emit(self.name, "No permission")
-    
-    def receiveD(self, dataR):
+    def receiveD(self, inp_ret): #receive data
+        ret = dataFormat(self.name, self.receiveD.__name__)
         if self.y <= self.permission[self.receiveD.__name__]:
-            fileName, data, meta = dataR
-            self.data[fileName] = data
-            #signal emit time done
-        else:
-            self.signals.data.emit(self.name, "No permission")
-    
-    def receiveR(self, dataReq):
-        if self.y <= self.permission[self.receiveR.__name__]:
-            fileName, meta = dataReq
-            #check permision if needed
-            if fileName in self.data.keys():
-                self.signals.data.emit(self.name, [fileName, self.data[fileName], {"dat_from":self.name, "dat_at":time.time()}])
+            if self.name == inp_ret.meta['to']:
+                file_name = inp_ret.meta['file_name']
+                self.data[file_name] = inp_ret.meta['data']
+                ret.log = f"{self.name} received {file_name} from {inp_ret.meta['from']}"
+                ret.time = time.time()
+                self.signals.data.emit(ret)
             else:
-                self.signals.data.emit(self.name, 404)
+                ret.log = "Wrong address"
+                ret.time = time.time()
+                self.signals.data.emit(ret)
         else:
-            self.signals.data.emit(self.name, "No permission")
+            ret.log = "No permission"
+            ret.time = time.time()
+            self.signals.data.emit(ret)
     
-    def commandR(self, command, arg=""):
-        if self.y <= self.permission[self.commandR.__name__]:
-            if command == 'upload':
-                file_name = arg
-                if arg.split(".")[-1].lower() in ['png','jpg','jpeg','gif']:
-                    f = Image.open(arg,"r")
-                    self.data[arg] = f
-                    self.signals.data.emit(self.name, f"{arg} uploaded successfully")
+    def commandR(self, inp_ret): #others e.g. upload
+        command = inp_ret.meta['command'].lower()
+        ret = dataFormat(self.name, self.commandR.__name__+"/"+command)
+        if command == 'upload':        
+            if self.y <= self.permission[command]:
+                file_name = inp_ret.meta['file_name']
+                f = open(file_name, "rb")
+                self.data[file_name] = f.read()
+                f.close()
+                ret.log = f"{file_name} uploaded successfully"
+                ret.time = time.time()
+                self.signals.data.emit(ret)
+            else:
+                ret.log = "No permission"
+                ret.time = time.time()
+                self.signals.data.emit(ret)
+        
+        elif command == 'request':        
+            if self.y <= self.permission[command]:
+                #check permission here using nameSplitter(inp_ret.meta['from'])[0] if needed
+                file_name = inp_ret.meta['file_name']
+                if file_name in self.data.keys():
+                    ret.log = f"Return {file_name}"
+                    ret.meta['file_name'] = file_name
+                    ret.meta['data'] = self.data[file_name]
+                    #ret.meta['original'] = inp_ret
+                    ret.meta['from'] = self.name
+                    ret.meta['to'] = inp_ret.meta['from']
+                    ret.time = time.time()
+                    self.signals.data.emit(ret)
                 else:
-                    f = open(arg,"r")
-                    self.data[arg] = f.read()
-                    f.close()
-                    self.signals.data.emit(self.name, "D")
+                    ret.log = "File not found"
+                    ret.time = time.time()
+                    self.signals.data.emit(ret)
             else:
-                self.signals.data.emit(self.name, "No command found")
+                ret.log = "No permission"
+                ret.time = time.time()
+                self.signals.data.emit(ret)
+            
+        elif command == 'self-request': #useless?
+            if self.y <= self.permission[command.lower()]:
+                file_name = inp_ret.meta['file_name']
+                ret.meta['file_name'] = file_name
+                ret.log = f"Requested {file_name}"
+                ret.time = time.time()
+                self.signals.request.emit(ret) 
+            else:
+                ret.log = "No permission"
+                ret.time = time.time()
+                self.signals.data.emit(ret)
+            
         else:
-            self.signals.data.emit(self.name, "No permission")
+            ret.log = "No command found"
+            ret.time = time.time()
+            self.signals.data.emit(ret)
     
-    def returnData(self, etc=""):
-        if self.y <= self.permission[self.returnData.__name__]:
-            self.signals.returnData.emit((self.y,self.x), self.data)
-        else:
-            self.signals.data.emit(self.name, "No permission")
+    def returnData(self, etc=""): #to save
+        self.signals.returnData.emit((self.y,self.x), self.data)
 
 class cellTable(QTableWidget):
     def __init__(self):
@@ -182,9 +247,6 @@ class cellTable(QTableWidget):
         self.setMinimumWidth(100)
         self.setMinimumHeight(110)
         self.verticalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        """
-        nBtn.setStyleSheet("border: none;background-color:rgb"+str(self.colNum[g]['color']));
-        #nBtn.clicked.connect(partial(self.prompt,self.boxes[eval("\""+box+"\"")]))"""
 
 class cellCol(QTableWidgetItem):
     def __init__(self, x, y):
@@ -214,7 +276,7 @@ class addBtnClass(QPushButton):
         self.setMinimumHeight(60)
         self.setMaximumWidth(60)
         self.setMaximumHeight(60)
-        self.setStyleSheet("background-color: gray; color: white;border: none;")
+        self.setStyleSheet("background-color: gray; color: white; border: none;")
         self.addSignal = addSignal()
         self.clicked.connect(self.add)
     
@@ -222,28 +284,28 @@ class addBtnClass(QPushButton):
         self.addSignal.add.emit(self.num)
 
 class MyApp(QMainWindow):
-    def __init__(self,setup_data):
+    def __init__(self,setup_data, log_dt):
         super().__init__()
         self.Q=QWidget()
         self.colNum = setup_data['colNum']
         self.table_num = len(setup_data['colNum'])
         self.permission = setup_data['permission']
+        self.data_provider = setup_data['data_provider']
+        self.logList = log_dt
         self.setCentralWidget(self.Q)
         self.initUI()
         
     def initUI(self):
-        self.ol=""
-        self.result=""
-        self.ti=""
-        self.QQ=QHBoxLayout()
-        self.A=QVBoxLayout()
-        self.Sc=QVBoxLayout()
-        self.btnA=QVBoxLayout()
-        self.btnB=QVBoxLayout()
-        self.btnWhole=QHBoxLayout()
-        self.time=QLabel("",self)
-        self.logList=[]
-        
+        self.ol = ""
+        self.result = ""
+        self.ti = ""
+        self.QQ = QHBoxLayout()
+        self.A = QVBoxLayout()
+        self.Sc = QVBoxLayout()
+        self.btnA = QVBoxLayout()
+        self.btnB = QVBoxLayout()
+        self.btnWhole = QHBoxLayout()
+        self.time = QLabel("",self)
         self.tables = []
         self.buttons = []
         self.main_signal = [[mainToSignal() for j in range(self.colNum[i])] for i in range(self.table_num)]
@@ -255,10 +317,10 @@ class MyApp(QMainWindow):
                 cell = cellCol(num, g)
                 nBtn.setItem(0,0, cell)
                 bbtn = underTable(num, g, self.permission)
-                bbtn.signals.data.connect(self.logUpdate)
+                bbtn.signals.data.connect(self.dataInterpret)
                 bbtn.signals.beep.connect(self.receive_func)
+                bbtn.signals.request.connect(self.requestConnect)
                 bbtn.signals.returnData.connect(self.returnedData)
-                self.main_signal[g][num].request.connect(bbtn.receiveR) #for receiving request
                 self.main_signal[g][num].command.connect(bbtn.commandR) #uploading
                 self.main_signal[g][num].data.connect(bbtn.receiveD) #for sending out data
                 self.main_signal[g][num].returnData.connect(bbtn.returnData) #for save
@@ -273,27 +335,23 @@ class MyApp(QMainWindow):
         self.wholeData = {
             "table_data":{
                 "colNum": self.colNum,
-                "permission":self.permission
+                "permission":self.permission,
+                "data_provider":self.data_provider
                 },
             "cell_data":[[[] for x in range(self.colNum[g])] for g in range(self.table_num)],
-            "log_data":""
+            "log_data":self.logList
         }
         
         for btns in self.tables:
             self.A.addLayout(btns)
-            
-            
-        #self.btnWhole.addLayout(self.btnA)
+        
         self.addBtnLis = [addBtnClass(g) for g in range(self.table_num)]
         for addbtn in self.addBtnLis:
             addbtn.addSignal.add.connect(self.addCell)
             self.btnB.addWidget(addbtn)
-        #self.btnWhole.addLayout(self.btnB)
-        #self.A.addLayout(self.btnWhole)
         
-        self.commandText=QLineEdit(self)
+        self.commandText = QLineEdit(self)
         self.commandText.returnPressed.connect(self.entered)
-        
         self.A.addWidget(self.commandText)
         
         self.scrollWidth = 250
@@ -302,11 +360,11 @@ class MyApp(QMainWindow):
         self.Btn.setMaximumWidth(self.scrollWidth)
         self.BtnS = QPushButton("save", self)
         self.BtnS.clicked.connect(self.save)
+        self.BtnS.setMaximumWidth(self.scrollWidth)
         shortcut = QShortcut(QKeySequence("Ctrl+S"), self)
         shortcut.activated.connect(self.save)
-        self.BtnS.setMaximumWidth(self.scrollWidth)
         self.scrollArea = QScrollArea()
-        self.scrollArea.setMaximumWidth(self.scrollWidth)
+        #self.scrollArea.setMaximumWidth(self.scrollWidth)
         self.scrollArea.setWidgetResizable(True)
         self.scrollArea.verticalScrollBar().rangeChanged.connect(self.moveToEnd)
         self.logScr = QLabel(self)
@@ -327,16 +385,16 @@ class MyApp(QMainWindow):
         self.setWindowTitle(f"Network Simulation -{code}")
         self.center()
         self.show()
+        for lg in self.logList:
+            self.logUpdate(lg[1], lg[2], color=gray, t=lg[0], new=False)
     
     def paintEvent(self, QPaintEvent):
+        self.time.setText(self.ti)
         if self.ol!=self.result:
             lns=[l.split(" ") for l in self.result.split("\n")]
             for Y in range(self.table_num):
                 for X in range(self.colNum[Y]):
                     self.buttons[Y][X].item(0, 0).setText(lns[Y][X])
-                    #self.buttons[Y][X].setText(f"{Y}_{X}"+"\n"+lns[Y][X])
-            self.ol=self.result
-            self.time.setText(self.ti)
 
     def center(self):
         qr = self.frameGeometry()
@@ -345,76 +403,96 @@ class MyApp(QMainWindow):
         self.move(qr.topLeft())
         
     def box(self):
-        t=time.time()
-        txt=""
-        for Y in range(self.table_num):
-            xls = []
-            for X in range(self.colNum[Y]):
-                xls.append(self.labels[Y][0])
-                #xls.append(str(random.randint(0,10)))
-            txt+=" ".join(xls)+"\n"
-        self.ti="time spent: "+fo2(time.time()-t)+"s"
-        self.result=txt
+        t = time.time()
+        self.ti = "time spent: "+fo2(time.time()-t)+"s"
+        self.result="\n".join([" ".join([self.labels[Y][0] for X in range(self.colNum[Y])]) for Y in range(self.table_num)])
         self.logUpdate("System", "Data updated", gray)
     
     def moveToEnd(self):
         self.scrollArea.verticalScrollBar().setValue(self.scrollArea.verticalScrollBar().maximum())
         
-    def logUpdate(self, name, string, col=''):
+    def logUpdate(self, name, string, color='', t=datetime.now().strftime('%H:%M:%S.%f')[:-4], new = True):
         logText = self.logScr.text()
         logText += "<br>"
-        if len(col) == 6:
-            logText += "<span style=\"color:#"+col+"\">"
-            logText += f"[{datetime.now().strftime('%H:%M:%S.%f')[:-4]}] {name}: {string}"
+        if len(color) == 6:
+            logText += "<span style=\"color:#"+color+"\">"
+            logText += f"[{t}] {name}: {string}"
             logText +="</span>"
         else:
-            logText += f"[{datetime.now().strftime('%H:%M:%S.%f')[:-4]}] {name}: {string}"
-        addText = f"[{datetime.now().strftime('%H:%M:%S.%f')[:-4]}] {name}: {string}"
-        print(addText)
-        self.logList.append([datetime.now().strftime('%H:%M:%S.%f')[:-4], name, string])
+            logText += f"[{t}] {name}: {string}"
+        addText = f"[{t}] {name}: {string}"
+        if new:
+            print(addText)
+            self.logList.append([datetime.now().strftime('%H:%M:%S.%f')[:-4], name, string])
         self.logScr.setText(logText)
     
     def entered(self):
-        text=self.commandText.text()
+        text = self.commandText.text()
         self.commandText.clear()
         self.prompt(text)
     
     def prompt(self, command):
-        self.logUpdate("Command", command, '')
+        self.logUpdate("System", command, '')
         cwords = command.split(" ")
+        command = cwords[0].lower()
         if len(cwords) > 1:
             if '#' in cwords[1]: #have a target node
-                target = cwords[1].split('#')
-                target = [returnNum(target[0]), int(target[1])]
-                if cwords[0].lower() == 'upload':
-                    fil_name = " ".join(cwords[2:])
-                    self.main_signal[target[0]][target[1]].command.emit('upload',fil_name) #upload file
-                elif cwords[0].lower() == 'up_and_down':
+                target = nameSplitter(cwords[1])
+                if command == 'upload':
+                    ret = dataFormat("System", self.prompt.__name__+"/"+command)
+                    ret.meta['command'] = command
+                    ret.meta['file_name'] = " ".join(cwords[2:])
+                    ret.time = time.time()
+                    self.main_signal[target[0]][target[1]].command.emit(ret) #upload file
+                
+                elif command == 'request':
+                    ret = dataFormat("System", self.prompt.__name__+"/"+command)
+                    ret.meta['command'] = command
+                    file_name = " ".join(cwords[3:])
+                    ret.meta['file_name'] = file_name
+                    requester = nameSplitter(cwords[2])
+                    ret.meta['from'] = nameMaker(requester[0], requester[1])
+                    ret.meta['to'] = nameMaker(target[0], target[1])
+                    ret.log = ret.meta['from']+" request "+file_name+" to "+ret.meta['to']
+                    ret.time = time.time()
+                    self.main_signal[target[0]][target[1]].command.emit(ret)
+                
+                elif command == 'up_and_down':
+                    file_name = " ".join(cwords[3:])
+                    self.prompt(f"upload {cwords[1]} {file_name}")
                     lenLog = len(self.logList) #
-                    self.main_signal[target[0]][target[1]].command.emit('upload',fil_name) #upload file
                     i=0
                     up = False
-                    while i < 50:
+                    while i < 100:
                         for li in logList[lenLog:]:
-                            if "uploaded "+fil_name in li:
+                            if f"{file_name} uploaded successfully" == li[2] and nameMaker(target[0], target[1]) == li[1]:
                                 up = True
                                 break
-                        time.sleep(0.1)
-                elif cwords[0] == 'request':
-                    pass
+                        time.sleep(0.02)
+                    self.prompt(f"request {cwords[1]} {cwords[2]} {file_name}")
+                    
                 else:
-                    self.logUpdate("Command", "No command found", '')
+                    self.logUpdate("System", "No command found", '')
             else:
                 if cwords[0].lower() == 'setname':
                     global code
                     code = " ".join(cwords[1:])
                     self.setWindowTitle(f"Network Simulation -{code}")
                     self.logUpdate("System", f"structure code -> {code}", gray)
+                
+                elif cwords[0].lower() == 'macroadd':
+                    target_layer = returnNum(cwords[1])
+                    quant = int(cwords[2])
+                    for i in range(quant):
+                        self.cellAdd(target_layer, False)
+                    self.logUpdate("System", "Log cleared", gray)
         else:
-            if command.lower() == '':
-                pass
+            if command.lower() == 'clearlog':
+                self.logList = []
+                self.logScr.setText("")
+                self.logUpdate("System", f"structure code -> {code}", gray)
             else:
-                self.logUpdate("Command", "No command found", '')
+                self.logUpdate("System", "No command found", '')
         pass
     
     def receive_func(self, name, func_id):
@@ -423,29 +501,42 @@ class MyApp(QMainWindow):
         elif func_id == 2:
             self.logUpdate(name, f"function_{func_id}")
     
-    def addCell(self, num):
+    def addCell(self, num, visible=True):
         self.colNum[num] += 1
         self.main_signal[num].append(mainToSignal())
-        
-        nBtn=cellTable()
-        cell=cellCol(self.colNum[num]-1, num)
-        nBtn.setItem(0,0, cell)
+        if visible:
+            nBtn = cellTable()
+            cell = cellCol(self.colNum[num]-1, num)
+            nBtn.setItem(0,0, cell)
         bbtn = underTable(self.colNum[num]-1, num)
-        bbtn.signals.data.connect(self.logUpdate)
+        bbtn.signals.data.connect(self.dataInterpret)
         bbtn.signals.beep.connect(self.receive_func)
-        self.main_signal[num][-1].request.connect(bbtn.receiveR)
         self.main_signal[num][-1].command.connect(bbtn.commandR)
         self.main_signal[num][-1].data.connect(bbtn.receiveD)
         self.main_signal[num][-1].returnData.connect(bbtn.returnData)
-        nBtn.setCellWidget(1,0, bbtn)
-        self.buttons[num].append(nBtn)
-        self.tables[num].addWidget(nBtn)
+        if visible:
+            nBtn.setCellWidget(1,0, bbtn)
+            self.buttons[num].append(nBtn)
+            self.tables[num].addWidget(nBtn)
         self.wholeData['cell_data'][num].append([])
-        self.logUpdate("Added",self.labels[num])
+        if visible:
+            self.logUpdate("Added",self.labels[num])
     
     def returnedData(self, coord, returnedData):
         y,x = coord
-        self.wholeData["cell_data"][y][x] = returnedData
+        self.wholeData["cell_data"][y][x] = list(returnedData.keys()) #for now
+    
+    def dataInterpret(self, inp_data):
+        self.logUpdate(inp_data.name, inp_data.log, gray)
+        if inp_data.function in ['commandR/request']:
+            inp_data.name = "System"
+            inp_data.function = self.dataInterpret.__name__
+            target = nameSplitter(inp_data.meta['to'])
+            inp_data.log = f"Sent {inp_data.meta['file_name']} to {inp_data.meta['to']}"
+            inp_data.time = time.time()
+            self.main_signal[target[0]][target[1]].data.emit(inp_data)
+        if inp_data.function in ['commandR/upload','commandR/request']:
+            self.logUpdate(inp_data.name, f"{inp_data.function} took {(time.time()-inp_data.time)}s", gray)
         
     def save(self):
         self.wholeData["log_data"] = self.logList
@@ -453,14 +544,21 @@ class MyApp(QMainWindow):
             yLis = []
             for X in range(self.colNum[Y]):
                 self.main_signal[Y][X].returnData.emit("")
-                #yLis.append(self.buttons[Y][X].itemAt(1, 0).returnData())
-            #self.wholeData["cell_data"].append(yLis)
         sav = open(f"./data/{code}_"+time.strftime("%Y%m%d_%H%M%S")+".txt","w")
         sav.write(str(self.wholeData).replace("'","\""))
         sav.close()
+        sav = open(f"./data/{code}.txt","w")
+        sav.write(str(self.wholeData).replace("'","\""))
+        sav.close()
         self.logUpdate("Saved",time.strftime("%Y-%m-%d-%H:%M:%S"))
+    
+    def requestConnect(self, inp_data):
+        y,x = nameSplitter(inp_data.name)
+        requestTo = random.randrange(len(self.main_signal[self.data_provider[y]]))
+        self.prompt(f"request {self.labels[self.data_provider[y]]}#{requestTo} {inp_data.name} {inp_data.meta['file_name']}")
+        self.logUpdate(inp_data.name, inp_data.log, gray)
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
-    ex = MyApp(loading_data)
+    ex = MyApp(loading_data, log_dt)
     app.exec_()
