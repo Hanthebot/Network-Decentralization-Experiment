@@ -3,7 +3,7 @@ from PyQt5.QtGui import QFont, QColor, QBrush, QKeySequence
 from PyQt5.QtCore import Qt, QObject, pyqtSignal
 from PIL import Image, ImageOps
 from datetime import datetime
-import os, time, traceback, random, sys, glob, json, random
+import os, time, traceback, random, sys, glob, json, random, string
 import numpy as np
 
 def mkIfNone(path):
@@ -18,31 +18,37 @@ def mkIfNone(path):
 mkIfNone("./data")
 
 gray = '808080'
-code = sys.argv[1].replace(".txt","") if len(sys.argv) >1 else "default"
+code = sys.argv[1].replace(".txt","") if len(sys.argv) > 1 else "default"
+default_data = {
+        "colNum" : [3, 4, 5, 6],
+        "permission":{"self-request": 3, "receiveD": 3, "request": 3, "upload": 0, "download": 0},
+        "data_provider":[0,0,0,0],
+        "labels":["Admin","Manager","Node","User"]
+    }
+
 if os.path.exists("./data/"+code+".txt"):
     print("File already existing. Loading...")
-    fil = open("./data/"+code+".txt", 'r')
-    total_data = json.load(fil)
-    fil.close()
+    with open("./data/"+code+".txt", 'r') as fil:
+        total_data = json.load(fil)
     loading_data = total_data['table_data']
+    if set(loading_data['permission'].keys()) != set(default_data['permission'].keys()):
+        for k in default_data['permission'].keys():
+            if k not in loading_data['permission'].keys():
+                loading_data['permission'][k] = len(loading_data['labels']) - 1
     log_dt = total_data['log_data']
     
-elif len(sys.argv) >1:
-    print("No file found. Continuing on default...")
-    loading_data = {
-        "colNum" : [3, 4, 5, 6],
-        "permission":{'self-request': 3, 'receiveD': 3, 'request': 3, 'upload': 0},
-        "data_provider":[0,0,0,0]
-    }
-    log_dt = []
 else:
-    print("No argument. Continuing on default...")
-    loading_data = {
-        "colNum" : [3, 4, 5, 6],
-        "permission":{'self-request': 3, 'receiveD': 3, 'request': 3, 'upload': 0},
-        "data_provider":[0,0,0,0]
-    }
+    if len(sys.argv) > 1:
+        print("No file found. Continuing on default...")
+    else:
+        print("No argument. Continuing on default...")
+    loading_data = default_data
     log_dt = []
+
+i = 0
+while len(loading_data['labels']) < len(loading_data['colNum']):
+    loading_data['labels'].append(f'{i}Emp')
+    i += 1
 
 def fo(a):    
     return "{0:.2f}".format(a).ljust(15)
@@ -60,37 +66,27 @@ def fo3(a):
     return "{0:.6f}".format(a).ljust(15)
 
 def fo4(a):    
-    return "{0:.6f}".format(a).ljust(len("{0:.6f}".format(a)))
+    return "{0:.6f}".format(a).ljust(len("{0:.6f}".format(a)))\
 
-def returnNum(a):
-    if a.lower() in ['admin', 'a']:
-        return 0
-    elif a.lower() in ['manager', 'm']:
-        return 1
-    elif a.lower() in ['node', 'n']:
-        return 2
-    elif a.lower() in ['user', 'u']:
-        return 3
-    else:
-        return 5
+def splitQS(a): #split quotes and space
+    l=[]
+    new = True
+    quote = False
+    for A in a:
+        if new:
+            l.append("")
+            new = False
+        if A == ' ' and quote != True:
+            new = True
+        elif A == '\"':
+            quote = not quote
+        else:
+            l[-1] += A
+    return l
 
-def nameSplitter(name):
-    if "#" in name:
-        clas, id_num = name.split("#")
-        clas = returnNum(clas)
-        id_num = int(id_num)
-    elif "_" in name:
-        clas, id_num = name.split("_")
-        clas = returnNum(clas)
-        id_num = int(id_num)
-    else:
-        clas, id_num (-1, -1)
-    
-    return (clas, id_num)
-
-def nameMaker(x,y):
-    labels = ['Admin', 'Manager', 'Node', 'User']
-    return f"{labels[y]}_{x}"
+def rand6(length=6):
+    chars = string.digits
+    random =  ''.join(random.choice(chars) for _ in range(length))
 
 class dataFormat():
     def __init__(self, name='', function='', log='', t=0):
@@ -102,7 +98,7 @@ class dataFormat():
 
 class beepSignals(QObject):
     data = pyqtSignal(object)
-    beep = pyqtSignal(str, int)
+    end = pyqtSignal(str)
     request = pyqtSignal(object)
     returnData = pyqtSignal(object,object)
 
@@ -115,14 +111,18 @@ class mainToSignal(QObject):
     returnData = pyqtSignal(object)
 
 class underTable(QWidget):
-    def __init__(self, x=0, y=0, permission={}, sabotage=False):
+    def __init__(self, x=0, y=0, permission={}, labels=[], sabotage=False):
         super().__init__()
         self.x = x
         self.y = y
         self.born = time.time()
+        self.last_update = time.time()
+        self.labels = labels
         self.permission = permission
-        self.labels = ['Admin', 'Manager', 'Node', 'User']
-        self.name = nameMaker(self.x, self.y)
+        for func in ["self-request", "receiveD", "request", "upload", "download"]:
+            if func not in self.permission.keys():
+                self.permission[func] = len(self.labels) - 1
+        self.name = self.nameMaker(self.x, self.y)
         self.layouta = QHBoxLayout()
         self.nBtn1=QPushButton("A") #age
         self.nBtn2=QPushButton("F") #send_keys
@@ -139,7 +139,10 @@ class underTable(QWidget):
         self.setLayout(self.layouta)
         self.signals = beepSignals()
         self.data = {}
-        
+    
+    def nameMaker(self, x, y):
+        return f"{self.labels[y]}_{x}"
+    
     def btn1_clicked(self): #return age
         ret = dataFormat(self.name, self.btn1_clicked.__name__)
         age = time.time()-self.born
@@ -169,6 +172,7 @@ class underTable(QWidget):
                 ret.log = f"{self.name} received {file_name} from {inp_ret.meta['from']}"
                 ret.time = time.time()
                 self.signals.data.emit(ret)
+                self.signals.end.emit(inp_ret.meta['code'])
             else:
                 ret.log = "Wrong address"
                 ret.time = time.time()
@@ -184,12 +188,12 @@ class underTable(QWidget):
         if command == 'upload':        
             if self.y <= self.permission[command]:
                 file_name = inp_ret.meta['file_name']
-                f = open(file_name, "rb")
-                self.data[file_name] = f.read()
-                f.close()
+                with open(file_name, "rb") as f:
+                    self.data[file_name] = f.read()
                 ret.log = f"{file_name} uploaded successfully"
                 ret.time = time.time()
                 self.signals.data.emit(ret)
+                self.signals.end.emit(inp_ret.meta['code'])
             else:
                 ret.log = "No permission"
                 ret.time = time.time()
@@ -203,11 +207,12 @@ class underTable(QWidget):
                     ret.log = f"Return {file_name}"
                     ret.meta['file_name'] = file_name
                     ret.meta['data'] = self.data[file_name]
-                    #ret.meta['original'] = inp_ret
+                    #ret.meta['original'] = inp_ret #retweet
                     ret.meta['from'] = self.name
                     ret.meta['to'] = inp_ret.meta['from']
                     ret.time = time.time()
                     self.signals.data.emit(ret)
+                    self.signals.end.emit(inp_ret.meta['code'])
                 else:
                     ret.log = "File not found"
                     ret.time = time.time()
@@ -224,6 +229,26 @@ class underTable(QWidget):
                 ret.log = f"Requested {file_name}"
                 ret.time = time.time()
                 self.signals.request.emit(ret) 
+            else:
+                ret.log = "No permission"
+                ret.time = time.time()
+                self.signals.data.emit(ret)
+        
+        elif command == 'download':        
+            if self.y <= self.permission[command]:
+                file_name = inp_ret.meta['file_name']
+                if file_name in self.data.keys():
+                    save_as = inp_ret.meta['save_as']
+                    with open(save_as, "wb") as f:
+                         f.write(self.data[file_name])
+                    ret.log = f"{file_name} downloaded as {save_as} successfully"
+                    ret.time = time.time()
+                    self.signals.data.emit(ret)
+                    self.signals.end.emit(inp_ret.meta['code'])
+                else:
+                    ret.log = "File not found"
+                    ret.time = time.time()
+                    self.signals.data.emit(ret)
             else:
                 ret.log = "No permission"
                 ret.time = time.time()
@@ -291,6 +316,7 @@ class MyApp(QMainWindow):
         self.table_num = len(setup_data['colNum'])
         self.permission = setup_data['permission']
         self.data_provider = setup_data['data_provider']
+        self.labels = loading_data['labels']
         self.logList = log_dt
         self.setCentralWidget(self.Q)
         self.initUI()
@@ -299,6 +325,7 @@ class MyApp(QMainWindow):
         self.ol = ""
         self.result = ""
         self.ti = ""
+        self.task_signal = {}
         self.QQ = QHBoxLayout()
         self.A = QVBoxLayout()
         self.Sc = QVBoxLayout()
@@ -316,9 +343,8 @@ class MyApp(QMainWindow):
                 nBtn = cellTable()
                 cell = cellCol(num, g)
                 nBtn.setItem(0,0, cell)
-                bbtn = underTable(num, g, self.permission)
+                bbtn = underTable(num, g, self.permission, self.labels)
                 bbtn.signals.data.connect(self.dataInterpret)
-                bbtn.signals.beep.connect(self.receive_func)
                 bbtn.signals.request.connect(self.requestConnect)
                 bbtn.signals.returnData.connect(self.returnedData)
                 self.main_signal[g][num].command.connect(bbtn.commandR) #uploading
@@ -330,13 +356,12 @@ class MyApp(QMainWindow):
             self.buttons.append(undButtons)
             self.tables.append(btns)
         
-        self.labels=['Admin','Manager','Node','User']
-        
         self.wholeData = {
             "table_data":{
                 "colNum": self.colNum,
                 "permission":self.permission,
-                "data_provider":self.data_provider
+                "data_provider":self.data_provider,
+                "labels":self.labels
                 },
             "cell_data":[[[] for x in range(self.colNum[g])] for g in range(self.table_num)],
             "log_data":self.logList
@@ -433,73 +458,111 @@ class MyApp(QMainWindow):
     
     def prompt(self, command):
         self.logUpdate("System", command, '')
-        cwords = command.split(" ")
+        cwords = splitQS(command)
         command = cwords[0].lower()
         if len(cwords) > 1:
-            if '#' in cwords[1]: #have a target node
-                target = nameSplitter(cwords[1])
+            if self.aName(cwords[1]): #have a target node
+                target = self.nameSplitter(cwords[1])
                 if command == 'upload':
                     ret = dataFormat("System", self.prompt.__name__+"/"+command)
                     ret.meta['command'] = command
-                    ret.meta['file_name'] = " ".join(cwords[2:])
+                    ret.meta['file_name'] = cwords[2]
+                    ret.meta['code'] = rand6() if len(cwords) <= 3 else cwords[3]
+                    self.task_signal[ret.meta['code']] = False
                     ret.time = time.time()
                     self.main_signal[target[0]][target[1]].command.emit(ret) #upload file
                 
                 elif command == 'request':
                     ret = dataFormat("System", self.prompt.__name__+"/"+command)
                     ret.meta['command'] = command
-                    file_name = " ".join(cwords[3:])
+                    file_name = cwords[3]
                     ret.meta['file_name'] = file_name
-                    requester = nameSplitter(cwords[2])
-                    ret.meta['from'] = nameMaker(requester[0], requester[1])
-                    ret.meta['to'] = nameMaker(target[0], target[1])
+                    ret.meta['code'] = rand6() if len(cwords) <= 4 else cwords[4]
+                    self.task_signal[ret.meta['code']] = False
+                    requester = self.nameSplitter(cwords[2])
+                    ret.meta['from'] = self.nameMaker(requester[0], requester[1])
+                    ret.meta['to'] = self.nameMaker(target[0], target[1])
                     ret.log = ret.meta['from']+" request "+file_name+" to "+ret.meta['to']
                     ret.time = time.time()
                     self.main_signal[target[0]][target[1]].command.emit(ret)
                 
+                elif command == 'download':
+                    ret = dataFormat("System", self.prompt.__name__+"/"+command)
+                    ret.meta['command'] = command
+                    file_name = cwords[2]
+                    save_as = cwords[3]
+                    ret.meta['file_name'] = file_name
+                    ret.meta['save_as'] = save_as
+                    ret.meta['code'] =  rand6() if len(cwords) <= 4 else cwords[4]
+                    self.task_signal[ret.meta['code']] = False
+                    ret.meta['from'] = "System"
+                    ret.meta['to'] = self.nameMaker(target[0], target[1])
+                    ret.log = ret.meta['from']+" download "+file_name+" to "+ret.meta['to']
+                    ret.time = time.time()
+                    self.main_signal[target[0]][target[1]].command.emit(ret)
+                
                 elif command == 'up_and_down':
-                    file_name = " ".join(cwords[3:])
-                    self.prompt(f"upload {cwords[1]} {file_name}")
-                    lenLog = len(self.logList) #
+                    file_name = cwords[3]
+                    ran_code = rand6()
+                    self.prompt(f"upload {cwords[1]} {file_name} {ran_code}")
                     i=0
-                    up = False
                     while i < 100:
-                        for li in logList[lenLog:]:
-                            if f"{file_name} uploaded successfully" == li[2] and nameMaker(target[0], target[1]) == li[1]:
-                                up = True
-                                break
+                        if self.task_signal[ran_code]:
+                            break
                         time.sleep(0.02)
-                    self.prompt(f"request {cwords[1]} {cwords[2]} {file_name}")
+                    if self.task_signal[ran_code]:
+                        ran_code2 = rand6()
+                        self.prompt(f"request {cwords[1]} {cwords[2]} {file_name} {ran_code2}")
+                        i=0
+                        while i < 100:
+                            if self.task_signal[ran_code2]:
+                                break
+                            time.sleep(0.02)
+                        if not self.task_signal[ran_code2]:
+                            self.logUpdate("System", "Failed requesting", '')
+                    else:
+                        self.logUpdate("System", "Failed uploading", '')
                     
                 else:
                     self.logUpdate("System", "No command found", '')
             else:
                 if cwords[0].lower() == 'setname':
                     global code
-                    code = " ".join(cwords[1:])
+                    code = cwords[1]
                     self.setWindowTitle(f"Network Simulation -{code}")
                     self.logUpdate("System", f"structure code -> {code}", gray)
                 
                 elif cwords[0].lower() == 'macroadd':
-                    target_layer = returnNum(cwords[1])
+                    target_layer = self.returnNum(cwords[1])
                     quant = int(cwords[2])
                     for i in range(quant):
                         self.cellAdd(target_layer, False)
                     self.logUpdate("System", "Log cleared", gray)
+                
+                elif cwords[0].lower() == 'requestR':
+                    target_layer = self.returnNum(cwords[1])
+                    requester = self.nameSplitter(cwords[2])
+                    file_name = cwords[3]
+                    requestTo = random.randrange(len(self.main_signal[target_layer]))
+                    self.prompt(f"request {self.labels[target_layer]}_{requestTo} {nameMaker(requester[0], requester[1])} {file_name}")
+                    self.logUpdate(f"System", "To {self.labels[target_layer]}_{requestTo}", gray)
+                
+                elif cwords[0].lower() == 'requestRR':
+                    target_layer = self.returnNum(cwords[1])
+                    request_layer = self.returnNum(cwords[2])
+                    file_name = cwords[3]
+                    requestTo = random.randrange(len(self.main_signal[target_layer]))
+                    requestFrom = random.randrange(len(self.main_signal[request_layer]))
+                    self.prompt(f"request {self.labels[target_layer]}_{requestTo} {self.labels[request_layer]}_{requestFrom} {file_name}")
+                    self.logUpdate(f"System", "To {self.labels[target_layer]}_{requestTo} from {self.labels[request_layer]}#{requestFrom}", gray)
         else:
             if command.lower() == 'clearlog':
                 self.logList = []
                 self.logScr.setText("")
-                self.logUpdate("System", f"structure code -> {code}", gray)
+                self.logUpdate("System", "Log cleared", gray)
             else:
                 self.logUpdate("System", "No command found", '')
         pass
-    
-    def receive_func(self, name, func_id):
-        if func_id == 1:
-            self.logUpdate(name, 'random text')
-        elif func_id == 2:
-            self.logUpdate(name, f"function_{func_id}")
     
     def addCell(self, num, visible=True):
         self.colNum[num] += 1
@@ -510,7 +573,7 @@ class MyApp(QMainWindow):
             nBtn.setItem(0,0, cell)
         bbtn = underTable(self.colNum[num]-1, num)
         bbtn.signals.data.connect(self.dataInterpret)
-        bbtn.signals.beep.connect(self.receive_func)
+        bbtn.signals.end.connect(self.taskOrganize)
         self.main_signal[num][-1].command.connect(bbtn.commandR)
         self.main_signal[num][-1].data.connect(bbtn.receiveD)
         self.main_signal[num][-1].returnData.connect(bbtn.returnData)
@@ -531,12 +594,15 @@ class MyApp(QMainWindow):
         if inp_data.function in ['commandR/request']:
             inp_data.name = "System"
             inp_data.function = self.dataInterpret.__name__
-            target = nameSplitter(inp_data.meta['to'])
+            target = self.nameSplitter(inp_data.meta['to'])
             inp_data.log = f"Sent {inp_data.meta['file_name']} to {inp_data.meta['to']}"
             inp_data.time = time.time()
             self.main_signal[target[0]][target[1]].data.emit(inp_data)
         if inp_data.function in ['commandR/upload','commandR/request']:
             self.logUpdate(inp_data.name, f"{inp_data.function} took {(time.time()-inp_data.time)}s", gray)
+    
+    def taskOrganize(self, ran_code):
+        self.task_signal[ran_code] = True
         
     def save(self):
         self.wholeData["log_data"] = self.logList
@@ -544,19 +610,46 @@ class MyApp(QMainWindow):
             yLis = []
             for X in range(self.colNum[Y]):
                 self.main_signal[Y][X].returnData.emit("")
-        sav = open(f"./data/{code}_"+time.strftime("%Y%m%d_%H%M%S")+".txt","w")
-        sav.write(str(self.wholeData).replace("'","\""))
-        sav.close()
-        sav = open(f"./data/{code}.txt","w")
-        sav.write(str(self.wholeData).replace("'","\""))
-        sav.close()
+        with open(f"./data/{code}_"+time.strftime("%Y%m%d_%H%M%S")+".txt","w") as sav:
+            sav.write(str(self.wholeData).replace("'","\""))
+        with open(f"./data/{code}.txt","w") as sav:
+            sav.write(str(self.wholeData).replace("'","\""))
         self.logUpdate("Saved",time.strftime("%Y-%m-%d-%H:%M:%S"))
     
     def requestConnect(self, inp_data):
-        y,x = nameSplitter(inp_data.name)
+        y,x = self.nameSplitter(inp_data.name)
         requestTo = random.randrange(len(self.main_signal[self.data_provider[y]]))
         self.prompt(f"request {self.labels[self.data_provider[y]]}#{requestTo} {inp_data.name} {inp_data.meta['file_name']}")
         self.logUpdate(inp_data.name, inp_data.log, gray)
+
+    def returnNum(self, a):
+        for x in self.labels:
+            if a.lower() in [x.lower(), x[0].lower()]:
+                return self.labels.index(x)
+        else:
+            return len(self.labels)+1
+
+    def nameSplitter(self, name):
+        if "#" in name:
+            clas, id_num = name.split("#")
+            clas = self.returnNum(clas)
+            id_num = int(id_num)
+        elif "_" in name:
+            clas, id_num = name.split("_")
+            clas = self.returnNum(clas)
+            id_num = int(id_num)
+        else:
+            clas, id_num (-1, -1)
+        
+        return (clas, id_num)
+    
+    def nameMaker(self, x,y):
+        return f"{self.labels[y]}_{x}"
+    
+    def aName(self, name):
+        if "#" in name or "_" in name:
+            return True
+        return False
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
