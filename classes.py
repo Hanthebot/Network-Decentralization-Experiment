@@ -31,6 +31,7 @@ class underTable(QWidget):
         super().__init__()
         self.x = x
         self.y = y
+        self.paralyzed = False
         self.born = time.time()
         self.last_update = time.time()
         self.labels = labels
@@ -65,6 +66,7 @@ class underTable(QWidget):
         ret.log = f"Age: {fo2(age)}s"
         ret.meta['born'] = self.born
         ret.meta['age'] = age
+        ret.meta['last_update'] = self.last_update
         ret.time = time.time()
         self.signals.data.emit(ret)
         
@@ -77,7 +79,7 @@ class underTable(QWidget):
         self.signals.data.emit(ret)
         
     def btn3_clicked(self): #paralyze
-        pass
+        self.paralyzed = True
         
     def receiveD(self, inp_ret): #receive data
         ret = dataFormat(self.name, self.receiveD.__name__)
@@ -89,6 +91,7 @@ class underTable(QWidget):
                 ret.time = time.time()
                 self.signals.data.emit(ret)
                 self.signals.end.emit(inp_ret.meta['code'])
+                self.last_update = time.time()
             else:
                 ret.log = "Wrong address"
                 ret.time = time.time()
@@ -110,6 +113,7 @@ class underTable(QWidget):
                 ret.time = time.time()
                 self.signals.data.emit(ret)
                 self.signals.end.emit(inp_ret.meta['code'])
+                self.last_update = time.time()
             else:
                 ret.log = "No permission"
                 ret.time = time.time()

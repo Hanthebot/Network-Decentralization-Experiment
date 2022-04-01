@@ -49,6 +49,23 @@ class MyApp(QMainWindow):
         self.data_provider = setup_data['data_provider']
         self.labels = loading_data['labels']
         self.logList = log_dt
+        self.usage = {
+            "upload":["upload file to cell", "upload [target] [file name] [code = random]"],
+            "request":["send file request to cell", "request [target] [requester] [file name] [code = random]"],
+            "download":["download file from cell","download [target] [file_name] [save directory] [code = random]"],
+            "up_and_down":["upload and request file, return time","up_and_down [target] [requester] [file_name]"],
+            "setname":["set name for structure","setname [name]"],
+            "usage":["return usage","usage [command/all]"],
+            "macroadd":["add certain number of cells","macroadd [layer name] [quantity]"],
+            "requestr":["request to random cell in target layer","requestr [target layer name] [requester]"],
+            "requestrr":["request from random cell in requesting layer to random cell in target layer","requestr [target layer name] [requesting layer name]"],
+            "clearlog":["clears log", "clearlog"],
+            "clearlog":["clears log", "help"],
+            "a":["returns cell age in seconds", "press button 'A'"],
+            "f":["returns list of files stored in the cell", "press button 'F'",],
+            "save":["save data","press save button or Ctrl+S"]
+        }
+        self.functions_count = {u:0 for u in self.usage}
         self.setCentralWidget(self.Q)
         self.initUI()
         
@@ -95,7 +112,8 @@ class MyApp(QMainWindow):
                 "labels":self.labels
                 },
             "cell_data":[[[] for x in range(self.colNum[g])] for g in range(self.table_num)],
-            "log_data":self.logList
+            "log_data":self.logList,
+            "func_data":self.functions_count
         }
         
         for btns in self.tables:
@@ -191,6 +209,11 @@ class MyApp(QMainWindow):
         self.logUpdate("System", command, '')
         cwords = splitQS(command)
         command = cwords[0].lower()
+        if command not in self.usage.keys():
+            self.logUpdate("System", "No command found", '')
+            return False
+        else:
+            self.functions_count[command] += 1
         if len(cwords) > 1:
             if self.aName(cwords[1]): #have a target node
                 target = self.nameSplitter(cwords[1])
@@ -198,7 +221,7 @@ class MyApp(QMainWindow):
                     ret = dataFormat("System", self.prompt.__name__+"/"+command)
                     ret.meta['command'] = command
                     ret.meta['file_name'] = cwords[2]
-                    ret.meta['code'] = rand6() if len(cwords) <= 3 else cwords[3]
+                    ret.meta['code'] = self.returnCode(command) if len(cwords) <= 3 else cwords[3]
                     self.task_signal[ret.meta['code']] = False
                     ret.time = time.time()
                     self.main_signal[target[0]][target[1]].command.emit(ret) #upload file
@@ -208,7 +231,7 @@ class MyApp(QMainWindow):
                     ret.meta['command'] = command
                     file_name = cwords[3]
                     ret.meta['file_name'] = file_name
-                    ret.meta['code'] = rand6() if len(cwords) <= 4 else cwords[4]
+                    ret.meta['code'] = self.returnCode(command) if len(cwords) <= 4 else cwords[4]
                     self.task_signal[ret.meta['code']] = False
                     requester = self.nameSplitter(cwords[2])
                     ret.meta['from'] = self.nameMaker(requester[0], requester[1])
@@ -224,7 +247,7 @@ class MyApp(QMainWindow):
                     save_as = cwords[3]
                     ret.meta['file_name'] = file_name
                     ret.meta['save_as'] = save_as
-                    ret.meta['code'] =  rand6() if len(cwords) <= 4 else cwords[4]
+                    ret.meta['code'] = self.returnCode(command)
                     self.task_signal[ret.meta['code']] = False
                     ret.meta['from'] = "System"
                     ret.meta['to'] = self.nameMaker(target[0], target[1])
@@ -233,8 +256,9 @@ class MyApp(QMainWindow):
                     self.main_signal[target[0]][target[1]].command.emit(ret)
                 
                 elif command == 'up_and_down':
+                    t = time.time()
                     file_name = cwords[3]
-                    ran_code = rand6()
+                    ran_code = self.returnCode(command)+"_U"
                     self.prompt(f"upload {cwords[1]} {file_name} {ran_code}")
                     i=0
                     while i < 100:
@@ -242,35 +266,47 @@ class MyApp(QMainWindow):
                             break
                         time.sleep(0.02)
                     if self.task_signal[ran_code]:
-                        ran_code2 = rand6()
+                        ran_code2 = self.returnCode(command)+"_D"
                         self.prompt(f"request {cwords[1]} {cwords[2]} {file_name} {ran_code2}")
                         i=0
                         while i < 100:
                             if self.task_signal[ran_code2]:
                                 break
                             time.sleep(0.02)
-                        if not self.task_signal[ran_code2]:
+                        if self.task_signal[ran_code2]:
+                            self.logUpdate("System", f"up_and_down {file_name} finished {time.time()-t}s", '')
+                        else:
                             self.logUpdate("System", "Failed requesting", '')
                     else:
                         self.logUpdate("System", "Failed uploading", '')
                     
                 else:
-                    self.logUpdate("System", "No command found", '')
+                    self.logUpdate("System", "Invalid syntax: try usage", '')
             else:
-                if cwords[0].lower() == 'setname':
+                if command == 'setname':
                     global code
                     code = cwords[1]
                     self.setWindowTitle(f"Network Simulation -{code}")
                     self.logUpdate("System", f"structure code -> {code}", gray)
+                    
+                if command == 'usage':
+                    phrase = cwords[1].lower()
+                    if phrase in self.usage.keys():
+                        self.logUpdate("System", f"{phrase}: "+'\n'.join(self.usage[phrase]), '')
+                    elif phrase == "all":
+                        for u in self.usage.keys():
+                            self.logUpdate("System", f"{u}: "+'\n'.join(self.usage[u]), '')
+                    else:
+                        self.logUpdate("System", "Invalid syntax: try usage", '')
                 
-                elif cwords[0].lower() == 'macroadd':
+                elif command == 'macroadd':
                     target_layer = self.returnNum(cwords[1])
                     quant = int(cwords[2])
                     for i in range(quant):
                         self.cellAdd(target_layer, False)
                     self.logUpdate("System", "Log cleared", gray)
                 
-                elif cwords[0].lower() == 'requestR':
+                elif command == 'requestr':
                     target_layer = self.returnNum(cwords[1])
                     requester = self.nameSplitter(cwords[2])
                     file_name = cwords[3]
@@ -278,7 +314,7 @@ class MyApp(QMainWindow):
                     self.prompt(f"request {self.labels[target_layer]}_{requestTo} {nameMaker(requester[0], requester[1])} {file_name}")
                     self.logUpdate(f"System", "To {self.labels[target_layer]}_{requestTo}", gray)
                 
-                elif cwords[0].lower() == 'requestRR':
+                elif command == 'requestrr':
                     target_layer = self.returnNum(cwords[1])
                     request_layer = self.returnNum(cwords[2])
                     file_name = cwords[3]
@@ -287,12 +323,14 @@ class MyApp(QMainWindow):
                     self.prompt(f"request {self.labels[target_layer]}_{requestTo} {self.labels[request_layer]}_{requestFrom} {file_name}")
                     self.logUpdate(f"System", "To {self.labels[target_layer]}_{requestTo} from {self.labels[request_layer]}#{requestFrom}", gray)
         else:
-            if command.lower() == 'clearlog':
+            if command == 'clearlog':
                 self.logList = []
                 self.logScr.setText("")
                 self.logUpdate("System", "Log cleared", gray)
+            elif command == 'help':
+                self.logUpdate("System", ", ".join(self.usage.keys()), gray)
             else:
-                self.logUpdate("System", "No command found", '')
+                    self.logUpdate("System", "Invalid syntax: try usage", '')
         pass
     
     def addCell(self, num, visible=True):
@@ -382,6 +420,15 @@ class MyApp(QMainWindow):
         if "#" in name or "_" in name:
             return True
         return False
+    
+    def returnCode(self, command, plus):
+        if command in self.usage.keys():
+            if plus:
+                return f"{command}#{self.functions_count[command]+1}"
+            else:
+                return f"{command}#{self.functions_count[command]}"
+        else:
+            return "no such command"
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
