@@ -87,6 +87,7 @@ class underTable(QWidget):
             if self.name == inp_ret.meta['to']:
                 file_name = inp_ret.meta['file_name']
                 self.data[file_name] = inp_ret.meta['data']
+                ret.meta['code'] = inp_ret.meta['code']
                 ret.log = f"{self.name} received {file_name} from {inp_ret.meta['from']}"
                 ret.time = time.time()
                 self.signals.data.emit(ret)
@@ -103,12 +104,13 @@ class underTable(QWidget):
     
     def commandR(self, inp_ret): #others e.g. upload
         command = inp_ret.meta['command'].lower()
-        ret = dataFormat(self.name, self.commandR.__name__+"/"+command)
+        ret = dataFormat(self.name, command)
         if command == 'upload':        
             if self.y <= self.permission[command]:
                 file_name = inp_ret.meta['file_name']
                 with open(file_name, "rb") as f:
                     self.data[file_name] = f.read()
+                ret.meta['code'] = inp_ret.meta['code']
                 ret.log = f"{file_name} uploaded successfully"
                 ret.time = time.time()
                 self.signals.end.emit(inp_ret.meta['code'])
@@ -162,6 +164,7 @@ class underTable(QWidget):
                     save_as = inp_ret.meta['save_as']
                     with open(save_as, "wb") as f:
                          f.write(self.data[file_name])
+                    ret.meta['code'] = inp_ret.meta['code']
                     ret.log = f"{file_name} downloaded as {save_as} successfully"
                     ret.time = time.time()
                     self.signals.end.emit(inp_ret.meta['code'])

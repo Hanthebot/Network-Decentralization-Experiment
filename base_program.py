@@ -70,6 +70,12 @@ class MyApp(QMainWindow):
             "save":["save data","press save button or Ctrl+S"]
         }
         self.functions_count = {u:0 for u in self.usage}
+        self.events = {
+            "receiveD": {},
+            "request": {},
+            "upload": {},
+            "download": {}
+        }
         self.ol = ""
         self.result = ""
         self.wholeData = {
@@ -89,7 +95,6 @@ class MyApp(QMainWindow):
         
     def initUI(self):
         self.ti = ""
-        self.task_signal = {}
         self.QQ = QHBoxLayout()
         self.A = QVBoxLayout()
         self.Sc = QVBoxLayout()
@@ -208,21 +213,19 @@ class MyApp(QMainWindow):
             if self.aName(cwords[1]): #have a target node
                 target = self.nameSplitter(cwords[1])
                 if command == 'upload':
-                    ret = dataFormat("System", self.prompt.__name__+"/"+command)
+                    ret = dataFormat("System", command)
                     ret.meta['command'] = command
                     ret.meta['file_name'] = cwords[2]
                     ret.meta['code'] = self.returnCode(command) if len(cwords) <= 3 else cwords[3]
-                    self.task_signal[ret.meta['code']] = False
                     ret.time = time.time()
                     self.main_signal[target[0]][target[1]].command.emit(ret) #upload file
                 
                 elif command == 'request':
-                    ret = dataFormat("System", self.prompt.__name__+"/"+command)
+                    ret = dataFormat("System", command)
                     ret.meta['command'] = command
                     file_name = cwords[3]
                     ret.meta['file_name'] = file_name
                     ret.meta['code'] = self.returnCode(command) if len(cwords) <= 4 else cwords[4]
-                    self.task_signal[ret.meta['code']] = False
                     requester = self.nameSplitter(cwords[2])
                     ret.meta['from'] = self.nameMaker(requester[0], requester[1])
                     ret.meta['to'] = self.nameMaker(target[0], target[1])
@@ -231,14 +234,13 @@ class MyApp(QMainWindow):
                     self.main_signal[target[0]][target[1]].command.emit(ret)
                 
                 elif command == 'download':
-                    ret = dataFormat("System", self.prompt.__name__+"/"+command)
+                    ret = dataFormat("System", command)
                     ret.meta['command'] = command
                     file_name = cwords[2]
                     save_as = cwords[3]
                     ret.meta['file_name'] = file_name
                     ret.meta['save_as'] = save_as
                     ret.meta['code'] = self.returnCode(command)
-                    self.task_signal[ret.meta['code']] = False
                     ret.meta['from'] = "System"
                     ret.meta['to'] = self.nameMaker(target[0], target[1])
                     ret.log = ret.meta['from']+" download "+file_name+" to "+ret.meta['to']
@@ -249,28 +251,10 @@ class MyApp(QMainWindow):
                     t = time.time()
                     file_name = cwords[3]
                     ran_code = self.returnCode(command)+"U"
+                    ran_code2 = self.returnCode(command)+"D"
+                    self.events["upload"][ran_code] = ['prompt', f"request {cwords[1]} {cwords[2]} {file_name} {ran_code2} -q"]
+                    self.events["receiveD"][ran_code2] = ['time_compare', t, self.returnCode(command)]
                     self.prompt(f"upload {cwords[1]} {file_name} {ran_code} -q")
-                    i = 0
-                    while i < 400:
-                        if self.task_signal[ran_code]:
-                            break
-                        time.sleep(0.005)
-                        i += 1
-                    if self.task_signal[ran_code]:
-                        ran_code2 = self.returnCode(command)+"D"
-                        self.prompt(f"request {cwords[1]} {cwords[2]} {file_name} {ran_code2} -q")
-                        i=0
-                        while i < 400:
-                            if self.task_signal[ran_code2]:
-                                break
-                            time.sleep(0.005)
-                            i += 1
-                        if self.task_signal[ran_code2]:
-                            self.logUpdate("System", f"up_and_down {file_name} finished {time.time()-t}s", '')
-                        else:
-                            self.logUpdate("System", "Failed requesting", '')
-                    else:
-                        self.logUpdate("System", "Failed uploading", '')
                     
                 else:
                     self.logUpdate("System", "Invalid syntax: try usage", '')
@@ -326,14 +310,13 @@ class MyApp(QMainWindow):
             elif command == 'label':
                 self.logUpdate("System", ", ".join(self.labels), gray)
             else:
-                    self.logUpdate("System", "Invalid syntax: try usage", '')
-        pass
+                self.logUpdate("System", "Invalid syntax: try usage", '')
     
     def addCell(self, Y, visible=True, setting=False, x=0):
         if not setting:
             self.colNum[Y] += 1
             x = self.colNum[Y]-1
-        self.main_signal[Y].append(mainToSignal())
+            self.main_signal[Y].append(mainToSignal())
         if visible:
             nBtn = cellTable()
             cell = cellCol(x, Y)
@@ -343,9 +326,9 @@ class MyApp(QMainWindow):
         bbtn.signals.end.connect(self.taskOrganize)
         bbtn.signals.request.connect(self.requestConnect)
         bbtn.signals.returnData.connect(self.returnedData)
-        self.main_signal[Y][-1].command.connect(bbtn.commandR)
-        self.main_signal[Y][-1].data.connect(bbtn.receiveD)
-        self.main_signal[Y][-1].returnData.connect(bbtn.returnData)
+        self.main_signal[Y][x].command.connect(bbtn.commandR)
+        self.main_signal[Y][x].data.connect(bbtn.receiveD)
+        self.main_signal[Y][x].returnData.connect(bbtn.returnData)
         if not setting:
             self.wholeData['cell_data'][Y].append([])
         if visible:
@@ -355,25 +338,28 @@ class MyApp(QMainWindow):
             if not setting:
                 self.logUpdate("Added",self.nameMaker(Y, x))
                 
-    
     def returnedData(self, coord, returnedData):
-        y,x = coord
+        y, x = coord
         self.wholeData["cell_data"][y][x] = list(returnedData.keys()) #for now
     
     def dataInterpret(self, inp_data):
         self.logUpdate(inp_data.name, inp_data.log, gray)
-        if inp_data.function in ['commandR/request']:
+        if inp_data.function == 'request':
             inp_data.name = "System"
             inp_data.function = self.dataInterpret.__name__
             target = self.nameSplitter(inp_data.meta['to'])
             inp_data.log = f"Sent {inp_data.meta['file_name']} to {inp_data.meta['to']}"
             inp_data.time = time.time()
             self.main_signal[target[0]][target[1]].data.emit(inp_data)
-        if inp_data.function in ['commandR/upload','commandR/request', 'receiveD']:
-            self.logUpdate(inp_data.name, f"{inp_data.function} took {(time.time()-inp_data.time)}s", gray)
+        if inp_data.function in self.events.keys():
+            if inp_data.meta['code'] in self.events[inp_data.function].keys():
+                event = self.events[inp_data.function][inp_data.meta['code']]
+                if event[0].lower() == 'prompt':
+                    self.prompt(event[1])
+                elif event[0].lower() == 'time_compare':
+                    self.logUpdate('System', f"{event[2]} took {inp_data.time-event[1]}s", '')
     
     def taskOrganize(self, ran_code):
-        self.task_signal[ran_code] = True
         tim = datetime.now().strftime('%H:%M:%S.%f')[:-4]
         self.ti = f"[{tim}] {ran_code}"
         
