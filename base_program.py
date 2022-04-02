@@ -29,7 +29,8 @@ if os.path.exists("./data/"+code+".txt"):
         for k in default_data['permission'].keys():
             if k not in loading_data['permission'].keys():
                 loading_data['permission'][k] = len(loading_data['labels']) - 1
-    log_dt = total_data['log_data']
+    log_dt = total_data.get('log_data',[])
+    input_dt = total_data.get('input_data',[])
     
 else:
     if len(sys.argv) > 1:
@@ -38,9 +39,10 @@ else:
         print("No argument. Continuing on default...")
     loading_data = default_data
     log_dt = []
+    input_dt = []
 
 class MyApp(QMainWindow):
-    def __init__(self,setup_data, log_dt):
+    def __init__(self,setup_data, log_dt, input_dt):
         super().__init__()
         self.Q=QWidget()
         self.colNum = setup_data['colNum']
@@ -49,6 +51,7 @@ class MyApp(QMainWindow):
         self.data_provider = setup_data['data_provider']
         self.labels = loading_data['labels']
         self.logList = log_dt
+        self.inputList = input_dt
         self.usage = {
             "upload":["upload file to cell", "upload [target] [file name] [code = random]"],
             "request":["send file request to cell", "request [target] [requester] [file name] [code = random]"],
@@ -60,18 +63,31 @@ class MyApp(QMainWindow):
             "requestr":["request to random cell in target layer","requestr [target layer name] [requester]"],
             "requestrr":["request from random cell in requesting layer to random cell in target layer","requestr [target layer name] [requesting layer name]"],
             "clearlog":["clears log", "clearlog"],
-            "clearlog":["clears log", "help"],
+            "help":["returns list of functions", "help"],
+            "label":["return label","label"],
             "a":["returns cell age in seconds", "press button 'A'"],
             "f":["returns list of files stored in the cell", "press button 'F'",],
             "save":["save data","press save button or Ctrl+S"]
         }
         self.functions_count = {u:0 for u in self.usage}
+        self.ol = ""
+        self.result = ""
+        self.wholeData = {
+            "table_data":{
+                "colNum": self.colNum,
+                "permission":self.permission,
+                "data_provider":self.data_provider,
+                "labels":self.labels
+                },
+            "cell_data":[[[] for X in range(self.colNum[Y])] for Y in range(self.table_num)],
+            "log_data":self.logList,
+            "input_data":self.inputList,
+            "func_data":self.functions_count
+        }
         self.setCentralWidget(self.Q)
         self.initUI()
         
     def initUI(self):
-        self.ol = ""
-        self.result = ""
         self.ti = ""
         self.task_signal = {}
         self.QQ = QHBoxLayout()
@@ -81,45 +97,17 @@ class MyApp(QMainWindow):
         self.btnB = QVBoxLayout()
         self.btnWhole = QHBoxLayout()
         self.time = QLabel("",self)
-        self.tables = []
-        self.buttons = []
-        self.main_signal = [[mainToSignal() for j in range(self.colNum[i])] for i in range(self.table_num)]
-        for g in range(self.table_num):
-            btns=QHBoxLayout()
-            undButtons = []
-            for num in range(self.colNum[g]):
-                nBtn = cellTable()
-                cell = cellCol(num, g)
-                nBtn.setItem(0,0, cell)
-                bbtn = underTable(num, g, self.permission, self.labels)
-                bbtn.signals.data.connect(self.dataInterpret)
-                bbtn.signals.request.connect(self.requestConnect)
-                bbtn.signals.returnData.connect(self.returnedData)
-                self.main_signal[g][num].command.connect(bbtn.commandR) #uploading
-                self.main_signal[g][num].data.connect(bbtn.receiveD) #for sending out data
-                self.main_signal[g][num].returnData.connect(bbtn.returnData) #for save
-                nBtn.setCellWidget(1,0, bbtn)
-                btns.addWidget(nBtn)
-                undButtons.append(nBtn)
-            self.buttons.append(undButtons)
-            self.tables.append(btns)
-        
-        self.wholeData = {
-            "table_data":{
-                "colNum": self.colNum,
-                "permission":self.permission,
-                "data_provider":self.data_provider,
-                "labels":self.labels
-                },
-            "cell_data":[[[] for x in range(self.colNum[g])] for g in range(self.table_num)],
-            "log_data":self.logList,
-            "func_data":self.functions_count
-        }
+        self.tables = [QHBoxLayout() for num in range(self.table_num)]
+        self.buttons = [[] for num in range(self.table_num)]
+        self.main_signal = [[mainToSignal() for X in range(self.colNum[Y])] for Y in range(self.table_num)]
+        for Y in range(self.table_num):
+            for X in range(self.colNum[Y]):
+                self.addCell(Y, visible=True, setting=True, x=X)
         
         for btns in self.tables:
             self.A.addLayout(btns)
         
-        self.addBtnLis = [addBtnClass(g) for g in range(self.table_num)]
+        self.addBtnLis = [addBtnClass(Y) for Y in range(self.table_num)]
         for addbtn in self.addBtnLis:
             addbtn.addSignal.add.connect(self.addCell)
             self.btnB.addWidget(addbtn)
@@ -127,6 +115,7 @@ class MyApp(QMainWindow):
         self.commandText = QLineEdit(self)
         self.commandText.returnPressed.connect(self.entered)
         self.A.addWidget(self.commandText)
+        QShortcut(Qt.Key_Up, self, self.last_command)
         
         self.scrollWidth = 250
         self.Btn = QPushButton("refresh", self)
@@ -153,7 +142,7 @@ class MyApp(QMainWindow):
         self.QQ.addLayout(self.btnB)
         self.QQ.addLayout(self.Sc)
         
-        self.statusBar().addPermanentWidget(self.time,0)
+        self.statusBar().addWidget(self.time,0)
         self.Q.setLayout(self.QQ)
         self.setGeometry(300,300,1000,500)
         self.setWindowTitle(f"Network Simulation -{code}")
@@ -164,11 +153,6 @@ class MyApp(QMainWindow):
     
     def paintEvent(self, QPaintEvent):
         self.time.setText(self.ti)
-        if self.ol!=self.result:
-            lns=[l.split(" ") for l in self.result.split("\n")]
-            for Y in range(self.table_num):
-                for X in range(self.colNum[Y]):
-                    self.buttons[Y][X].item(0, 0).setText(lns[Y][X])
 
     def center(self):
         qr = self.frameGeometry()
@@ -185,7 +169,8 @@ class MyApp(QMainWindow):
     def moveToEnd(self):
         self.scrollArea.verticalScrollBar().setValue(self.scrollArea.verticalScrollBar().maximum())
         
-    def logUpdate(self, name, string, color='', t=datetime.now().strftime('%H:%M:%S.%f')[:-4], new = True):
+    def logUpdate(self, name, string, color='', t=None, new=True):
+        t = datetime.now().strftime('%H:%M:%S.%f')[:-4] if t == None else t
         logText = self.logScr.text()
         logText += "<br>"
         if len(color) == 6:
@@ -197,7 +182,7 @@ class MyApp(QMainWindow):
         addText = f"[{t}] {name}: {string}"
         if new:
             print(addText)
-            self.logList.append([datetime.now().strftime('%H:%M:%S.%f')[:-4], name, string.replace("\"","'")])
+            self.logList.append([t, name, string.replace("\"","'")])
         self.logScr.setText(logText)
     
     def entered(self):
@@ -206,8 +191,13 @@ class MyApp(QMainWindow):
         self.prompt(text)
     
     def prompt(self, command):
-        self.logUpdate("System", command, '')
         cwords = splitQS(command)
+        if cwords[-1] != '-q':
+            self.inputList.append([datetime.now().strftime('%H:%M:%S.%f')[:-4], command])
+            self.logUpdate("Prompt", command, '')
+        else:
+            self.logUpdate("Prompt", command, gray)
+            cwords = cwords[:-1]
         command = cwords[0].lower()
         if command not in self.usage.keys():
             self.logUpdate("System", "No command found", '')
@@ -258,21 +248,23 @@ class MyApp(QMainWindow):
                 elif command == 'up_and_down':
                     t = time.time()
                     file_name = cwords[3]
-                    ran_code = self.returnCode(command)+"_U"
-                    self.prompt(f"upload {cwords[1]} {file_name} {ran_code}")
-                    i=0
-                    while i < 100:
+                    ran_code = self.returnCode(command)+"U"
+                    self.prompt(f"upload {cwords[1]} {file_name} {ran_code} -q")
+                    i = 0
+                    while i < 400:
                         if self.task_signal[ran_code]:
                             break
-                        time.sleep(0.02)
+                        time.sleep(0.005)
+                        i += 1
                     if self.task_signal[ran_code]:
-                        ran_code2 = self.returnCode(command)+"_D"
-                        self.prompt(f"request {cwords[1]} {cwords[2]} {file_name} {ran_code2}")
+                        ran_code2 = self.returnCode(command)+"D"
+                        self.prompt(f"request {cwords[1]} {cwords[2]} {file_name} {ran_code2} -q")
                         i=0
-                        while i < 100:
+                        while i < 400:
                             if self.task_signal[ran_code2]:
                                 break
-                            time.sleep(0.02)
+                            time.sleep(0.005)
+                            i += 1
                         if self.task_signal[ran_code2]:
                             self.logUpdate("System", f"up_and_down {file_name} finished {time.time()-t}s", '')
                         else:
@@ -292,10 +284,10 @@ class MyApp(QMainWindow):
                 if command == 'usage':
                     phrase = cwords[1].lower()
                     if phrase in self.usage.keys():
-                        self.logUpdate("System", f"{phrase}: "+'\n'.join(self.usage[phrase]), '')
+                        self.logUpdate("System", f"{phrase}: "+' \\ '.join(self.usage[phrase]), '')
                     elif phrase == "all":
                         for u in self.usage.keys():
-                            self.logUpdate("System", f"{u}: "+'\n'.join(self.usage[u]), '')
+                            self.logUpdate("System", f"{u}: "+' \\ '.join(self.usage[u]), '')
                     else:
                         self.logUpdate("System", "Invalid syntax: try usage", '')
                 
@@ -304,7 +296,7 @@ class MyApp(QMainWindow):
                     quant = int(cwords[2])
                     for i in range(quant):
                         self.cellAdd(target_layer, False)
-                    self.logUpdate("System", "Log cleared", gray)
+                    self.logUpdate("System", f"{quant} {self.labels[target_layer]}s added", gray)
                 
                 elif command == 'requestr':
                     target_layer = self.returnNum(cwords[1])
@@ -327,32 +319,42 @@ class MyApp(QMainWindow):
                 self.logList = []
                 self.logScr.setText("")
                 self.logUpdate("System", "Log cleared", gray)
+            
             elif command == 'help':
                 self.logUpdate("System", ", ".join(self.usage.keys()), gray)
+                
+            elif command == 'label':
+                self.logUpdate("System", ", ".join(self.labels), gray)
             else:
                     self.logUpdate("System", "Invalid syntax: try usage", '')
         pass
     
-    def addCell(self, num, visible=True):
-        self.colNum[num] += 1
-        self.main_signal[num].append(mainToSignal())
+    def addCell(self, Y, visible=True, setting=False, x=0):
+        if not setting:
+            self.colNum[Y] += 1
+            x = self.colNum[Y]-1
+        self.main_signal[Y].append(mainToSignal())
         if visible:
             nBtn = cellTable()
-            cell = cellCol(self.colNum[num]-1, num)
-            nBtn.setItem(0,0, cell)
-        bbtn = underTable(self.colNum[num]-1, num)
+            cell = cellCol(x, Y)
+            nBtn.setItem(0, 0, cell)
+        bbtn = underTable(x, Y, permission=self.permission, labels=self.labels)
         bbtn.signals.data.connect(self.dataInterpret)
         bbtn.signals.end.connect(self.taskOrganize)
-        self.main_signal[num][-1].command.connect(bbtn.commandR)
-        self.main_signal[num][-1].data.connect(bbtn.receiveD)
-        self.main_signal[num][-1].returnData.connect(bbtn.returnData)
+        bbtn.signals.request.connect(self.requestConnect)
+        bbtn.signals.returnData.connect(self.returnedData)
+        self.main_signal[Y][-1].command.connect(bbtn.commandR)
+        self.main_signal[Y][-1].data.connect(bbtn.receiveD)
+        self.main_signal[Y][-1].returnData.connect(bbtn.returnData)
+        if not setting:
+            self.wholeData['cell_data'][Y].append([])
         if visible:
             nBtn.setCellWidget(1,0, bbtn)
-            self.buttons[num].append(nBtn)
-            self.tables[num].addWidget(nBtn)
-        self.wholeData['cell_data'][num].append([])
-        if visible:
-            self.logUpdate("Added",self.labels[num])
+            self.buttons[Y].append(nBtn)
+            self.tables[Y].addWidget(nBtn)
+            if not setting:
+                self.logUpdate("Added",self.nameMaker(Y, x))
+                
     
     def returnedData(self, coord, returnedData):
         y,x = coord
@@ -363,16 +365,17 @@ class MyApp(QMainWindow):
         if inp_data.function in ['commandR/request']:
             inp_data.name = "System"
             inp_data.function = self.dataInterpret.__name__
-            inp_data.meta['code'] =  rand6()
             target = self.nameSplitter(inp_data.meta['to'])
             inp_data.log = f"Sent {inp_data.meta['file_name']} to {inp_data.meta['to']}"
             inp_data.time = time.time()
             self.main_signal[target[0]][target[1]].data.emit(inp_data)
-        if inp_data.function in ['commandR/upload','commandR/request']:
+        if inp_data.function in ['commandR/upload','commandR/request', 'receiveD']:
             self.logUpdate(inp_data.name, f"{inp_data.function} took {(time.time()-inp_data.time)}s", gray)
     
     def taskOrganize(self, ran_code):
         self.task_signal[ran_code] = True
+        tim = datetime.now().strftime('%H:%M:%S.%f')[:-4]
+        self.ti = f"[{tim}] {ran_code}"
         
     def save(self):
         self.wholeData["log_data"] = self.logList
@@ -417,20 +420,22 @@ class MyApp(QMainWindow):
         return f"{self.labels[y]}_{x}"
     
     def aName(self, name):
-        if "#" in name or "_" in name:
-            return True
-        return False
+        try:
+            return self.nameSplitter(name) != (-1,-1)
+        except:
+            return False
     
-    def returnCode(self, command, plus):
+    def returnCode(self, command):
         if command in self.usage.keys():
-            if plus:
-                return f"{command}#{self.functions_count[command]+1}"
-            else:
-                return f"{command}#{self.functions_count[command]}"
+            return f"{command}#{self.functions_count[command]}"
         else:
-            return "no such command"
+            return "None#0"
+    
+    def last_command(self):
+        if len(self.inputList) > 0:
+            self.commandText.setText(self.inputList[-1][1])
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
-    ex = MyApp(loading_data, log_dt)
+    ex = MyApp(loading_data, log_dt, input_dt)
     app.exec_()

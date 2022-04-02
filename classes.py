@@ -111,8 +111,8 @@ class underTable(QWidget):
                     self.data[file_name] = f.read()
                 ret.log = f"{file_name} uploaded successfully"
                 ret.time = time.time()
-                self.signals.data.emit(ret)
                 self.signals.end.emit(inp_ret.meta['code'])
+                self.signals.data.emit(ret)
                 self.last_update = time.time()
             else:
                 ret.log = "No permission"
@@ -130,9 +130,10 @@ class underTable(QWidget):
                     #ret.meta['original'] = inp_ret #retweet
                     ret.meta['from'] = self.name
                     ret.meta['to'] = inp_ret.meta['from']
+                    ret.meta['code'] = inp_ret.meta['code']
                     ret.time = time.time()
-                    self.signals.data.emit(ret)
                     self.signals.end.emit(inp_ret.meta['code'])
+                    self.signals.data.emit(ret)
                 else:
                     ret.log = "File not found"
                     ret.time = time.time()
@@ -163,8 +164,8 @@ class underTable(QWidget):
                          f.write(self.data[file_name])
                     ret.log = f"{file_name} downloaded as {save_as} successfully"
                     ret.time = time.time()
-                    self.signals.data.emit(ret)
                     self.signals.end.emit(inp_ret.meta['code'])
+                    self.signals.data.emit(ret)
                 else:
                     ret.log = "File not found"
                     ret.time = time.time()
