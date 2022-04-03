@@ -15,8 +15,12 @@ gray = '808080'
 code = sys.argv[1].replace(".txt","") if len(sys.argv) > 1 else "default"
 default_data = {
         "colNum" : [3, 4, 5, 6],
-        "permission":{"self-request": 3, "receiveD": 3, "request": 3, "upload": 0, "download": 0},
-        "data_provider":[0,0,0,0],
+        "permission":{"self-request": 3, "received": 3, "request": 3, "upload": 0, "download": 0},
+        "sync":{
+            "data_provider": [0, 0, 0, 0],
+            "sync": [0, 0, False, False],
+            "coworker_check": [0, False, False, False]
+        },
         "labels":["Admin","Manager","Node","User"]
     }
 
@@ -29,8 +33,10 @@ if os.path.exists("./data/"+code+".txt"):
         for k in default_data['permission'].keys():
             if k not in loading_data['permission'].keys():
                 loading_data['permission'][k] = len(loading_data['labels']) - 1
-    log_dt = total_data.get('log_data',[])
-    input_dt = total_data.get('input_data',[])
+    log_dt = total_data.get('log_data', [])
+    input_dt = total_data.get('input_data', [])
+    if total_data.get('sync', 0) == 0:
+        total_data['sync'] = default_data['sync']
     
 else:
     if len(sys.argv) > 1:
@@ -44,34 +50,34 @@ else:
 class MyApp(QMainWindow):
     def __init__(self,setup_data, log_dt, input_dt):
         super().__init__()
-        self.Q=QWidget()
+        self.Q = QWidget()
         self.colNum = setup_data['colNum']
         self.table_num = len(setup_data['colNum'])
         self.permission = setup_data['permission']
-        self.data_provider = setup_data['data_provider']
+        self.syncData = setup_data['sync']
         self.labels = loading_data['labels']
         self.logList = log_dt
         self.inputList = input_dt
         self.usage = {
-            "upload":["upload file to cell", "upload [target] [file name] [code = random]"],
-            "request":["send file request to cell", "request [target] [requester] [file name] [code = random]"],
-            "download":["download file from cell","download [target] [file_name] [save directory] [code = random]"],
-            "up_and_down":["upload and request file, return time","up_and_down [target] [requester] [file_name]"],
-            "setname":["set name for structure","setname [name]"],
-            "usage":["return usage","usage [command/all]"],
-            "macroadd":["add certain number of cells","macroadd [layer name] [quantity]"],
-            "requestr":["request to random cell in target layer","requestr [target layer name] [requester]"],
-            "requestrr":["request from random cell in requesting layer to random cell in target layer","requestr [target layer name] [requesting layer name]"],
-            "clearlog":["clears log", "clearlog"],
-            "help":["returns list of functions", "help"],
-            "label":["return label","label"],
-            "a":["returns cell age in seconds", "press button 'A'"],
-            "f":["returns list of files stored in the cell", "press button 'F'",],
-            "save":["save data","press save button or Ctrl+S"]
+            "upload": ["upload file to cell", "upload [target] [file name] [code = random]"],
+            "request": ["send file request to cell", "request [target] [requester] [file name] [code = random]"],
+            "download": ["download file from cell","download [target] [file_name] [save directory] [code = random]"],
+            "up_and_down": ["upload and request file, return time","up_and_down [target] [requester] [file_name]"],
+            "setname": ["set name for structure","setname [name]"],
+            "usage": ["return usage","usage [command/all]"],
+            "macroadd": ["add certain number of cells","macroadd [layer name] [quantity]"],
+            "requestr": ["request to random cell in target layer","requestr [target layer name] [requester]"],
+            "requestrr": ["request from random cell in requesting layer to random cell in target layer","requestr [target layer name] [requesting layer name]"],
+            "clearlog": ["clears log", "clearlog"],
+            "help": ["returns list of functions", "help"],
+            "label": ["return label","label"],
+            "a": ["returns cell age in seconds", "press button 'A'"],
+            "f": ["returns list of files stored in the cell", "press button 'F'",],
+            "save": ["save data","press save button or Ctrl+S"]
         }
         self.functions_count = {u:0 for u in self.usage}
         self.events = {
-            "receiveD": {},
+            "received": {},
             "request": {},
             "upload": {},
             "download": {}
@@ -79,17 +85,18 @@ class MyApp(QMainWindow):
         self.ol = ""
         self.result = ""
         self.wholeData = {
-            "table_data":{
+            "table_data": {
                 "colNum": self.colNum,
-                "permission":self.permission,
-                "data_provider":self.data_provider,
-                "labels":self.labels
+                "permission": self.permission,
+                "sync": self.syncData,
+                "labels": self.labels
                 },
-            "cell_data":[[[] for X in range(self.colNum[Y])] for Y in range(self.table_num)],
-            "log_data":self.logList,
-            "input_data":self.inputList,
-            "func_data":self.functions_count
+            "cell_data": [[[] for X in range(self.colNum[Y])] for Y in range(self.table_num)],
+            "log_data": self.logList,
+            "input_data": self.inputList,
+            "func_data": self.functions_count
         }
+        self.lastI = 0
         self.setCentralWidget(self.Q)
         self.initUI()
         
@@ -121,6 +128,7 @@ class MyApp(QMainWindow):
         self.commandText.returnPressed.connect(self.entered)
         self.A.addWidget(self.commandText)
         QShortcut(Qt.Key_Up, self, self.last_command)
+        QShortcut(Qt.Key_Down, self, self.then_command)
         
         self.scrollWidth = 250
         self.Btn = QPushButton("refresh", self)
@@ -148,6 +156,9 @@ class MyApp(QMainWindow):
         self.QQ.addLayout(self.Sc)
         
         self.statusBar().addWidget(self.time,0)
+        for Y in range(self.table_num):
+            for X in range(self.colNum[Y]):
+                self.main_signal[Y][X].active.emit(True)
         self.Q.setLayout(self.QQ)
         self.setGeometry(300,300,1000,500)
         self.setWindowTitle(f"Network Simulation -{code}")
@@ -193,17 +204,24 @@ class MyApp(QMainWindow):
     def entered(self):
         text = self.commandText.text()
         self.commandText.clear()
+        self.lastI = 0
         self.prompt(text)
     
-    def prompt(self, command):
-        cwords = splitQS(command)
-        if cwords[-1] != '-q':
-            self.inputList.append([datetime.now().strftime('%H:%M:%S.%f')[:-4], command])
-            self.logUpdate("Prompt", command, '')
-        else:
-            self.logUpdate("Prompt", command, gray)
-            cwords = cwords[:-1]
+    def prompt(self, commandF):
+        cwords = splitQS(commandF.replace("'", "\""))
         command = cwords[0].lower()
+        if cwords[-1] == '-t':
+            t = time.time()
+            self.events[command][cwords[-2]] = ['time_compare', t, cwords[-2]]
+            self.inputList.append([datetime.now().strftime('%H:%M:%S.%f')[:-4], commandF])
+            self.logUpdate("Prompt", commandF, '')
+            cwords = cwords[:-1]
+        elif cwords[-1] == '-q':
+            self.logUpdate("Prompt", commandF, gray)
+            cwords = cwords[:-1]
+        else:
+            self.inputList.append([datetime.now().strftime('%H:%M:%S.%f')[:-4], commandF])
+            self.logUpdate("Prompt", commandF, '')
         if command not in self.usage.keys():
             self.logUpdate("System", "No command found", '')
             return False
@@ -253,8 +271,15 @@ class MyApp(QMainWindow):
                     ran_code = self.returnCode(command)+"U"
                     ran_code2 = self.returnCode(command)+"D"
                     self.events["upload"][ran_code] = ['prompt', f"request {cwords[1]} {cwords[2]} {file_name} {ran_code2} -q"]
-                    self.events["receiveD"][ran_code2] = ['time_compare', t, self.returnCode(command)]
+                    self.events["received"][ran_code2] = ['time_compare', t, self.returnCode(command)]
                     self.prompt(f"upload {cwords[1]} {file_name} {ran_code} -q")
+                
+                elif command == 'requestr':
+                    requester = self.nameSplitter(cwords[1])
+                    target_layer = self.syncData['data_provider'][requester[0]]
+                    file_name = cwords[2]
+                    requestTo = random.randrange(self.colNum[target_layer])
+                    self.prompt(f"request {self.nameMaker(target_layer, requestTo)} {self.nameMaker(requester[0], requester[1])} {file_name} -q")
                     
                 else:
                     self.logUpdate("System", "Invalid syntax: try usage", '')
@@ -282,22 +307,13 @@ class MyApp(QMainWindow):
                         self.cellAdd(target_layer, False)
                     self.logUpdate("System", f"{quant} {self.labels[target_layer]}s added", gray)
                 
-                elif command == 'requestr':
-                    target_layer = self.returnNum(cwords[1])
-                    requester = self.nameSplitter(cwords[2])
-                    file_name = cwords[3]
-                    requestTo = random.randrange(len(self.main_signal[target_layer]))
-                    self.prompt(f"request {self.labels[target_layer]}_{requestTo} {nameMaker(requester[0], requester[1])} {file_name}")
-                    self.logUpdate(f"System", "To {self.labels[target_layer]}_{requestTo}", gray)
-                
                 elif command == 'requestrr':
-                    target_layer = self.returnNum(cwords[1])
-                    request_layer = self.returnNum(cwords[2])
-                    file_name = cwords[3]
-                    requestTo = random.randrange(len(self.main_signal[target_layer]))
-                    requestFrom = random.randrange(len(self.main_signal[request_layer]))
-                    self.prompt(f"request {self.labels[target_layer]}_{requestTo} {self.labels[request_layer]}_{requestFrom} {file_name}")
-                    self.logUpdate(f"System", "To {self.labels[target_layer]}_{requestTo} from {self.labels[request_layer]}#{requestFrom}", gray)
+                    request_layer = self.returnNum(cwords[1])
+                    target_layer = self.syncData['data_provider'][request_layer]
+                    file_name = cwords[2]
+                    requestTo = random.randrange(self.colNum[target_layer])
+                    requestFrom = random.randrange(self.colNum[request_layer])
+                    self.prompt(f"request {self.nameMaker(target_layer, requestTo)} {self.nameMaker(request_layer, requestFrom)} {file_name} -q")
         else:
             if command == 'clearlog':
                 self.logList = []
@@ -324,40 +340,55 @@ class MyApp(QMainWindow):
         bbtn = underTable(x, Y, permission=self.permission, labels=self.labels)
         bbtn.signals.data.connect(self.dataInterpret)
         bbtn.signals.end.connect(self.taskOrganize)
-        bbtn.signals.request.connect(self.requestConnect)
         bbtn.signals.returnData.connect(self.returnedData)
+        bbtn.signals.publish.connect(self.publisher)
+        bbtn.signals.sync.connect(self.syncer)
         self.main_signal[Y][x].command.connect(bbtn.commandR)
-        self.main_signal[Y][x].data.connect(bbtn.receiveD)
         self.main_signal[Y][x].returnData.connect(bbtn.returnData)
-        if not setting:
-            self.wholeData['cell_data'][Y].append([])
+        self.main_signal[Y][x].active.connect(bbtn.activate)
         if visible:
+            nBtn.item(0, 0).setText(self.labels[Y][0])
             nBtn.setCellWidget(1,0, bbtn)
             self.buttons[Y].append(nBtn)
             self.tables[Y].addWidget(nBtn)
-            if not setting:
+        if not setting:
+            self.wholeData['cell_data'][Y].append([])
+            self.main_signal[Y][x].active.emit(True)
+            if visible:
                 self.logUpdate("Added",self.nameMaker(Y, x))
                 
     def returnedData(self, coord, returnedData):
         y, x = coord
         self.wholeData["cell_data"][y][x] = list(returnedData.keys()) #for now
     
-    def dataInterpret(self, inp_data):
-        self.logUpdate(inp_data.name, inp_data.log, gray)
-        if inp_data.function == 'request':
-            inp_data.name = "System"
-            inp_data.function = self.dataInterpret.__name__
-            target = self.nameSplitter(inp_data.meta['to'])
-            inp_data.log = f"Sent {inp_data.meta['file_name']} to {inp_data.meta['to']}"
-            inp_data.time = time.time()
-            self.main_signal[target[0]][target[1]].data.emit(inp_data)
-        if inp_data.function in self.events.keys():
-            if inp_data.meta['code'] in self.events[inp_data.function].keys():
-                event = self.events[inp_data.function][inp_data.meta['code']]
+    def dataInterpret(self, inp_ret):
+        if inp_ret.function not in ['returnsync', 'acceptpublish', 'acceptsync']:
+            self.logUpdate(inp_ret.name, inp_ret.log, gray)
+        if inp_ret.function == 'request':
+            inp_ret.name = "System"
+            inp_ret.function = self.dataInterpret.__name__
+            target = self.nameSplitter(inp_ret.meta['to'])
+            inp_ret.meta['command'] = 'received'
+            inp_ret.log = f"Sent {inp_ret.meta['file_name']} to {inp_ret.meta['to']}"
+            inp_ret.time = time.time()
+            self.main_signal[target[0]][target[1]].command.emit(inp_ret)
+        elif inp_ret.function == 'returnsync':
+            inp_ret.name = "System"
+            inp_ret.function = self.dataInterpret.__name__
+            target = self.nameSplitter(inp_ret.meta['to'])
+            inp_ret.meta['command'] = 'acceptsync'
+            inp_ret.log = f"Sent sync data to {inp_ret.meta['to']}"
+            inp_ret.time = time.time()
+            self.main_signal[target[0]][target[1]].command.emit(inp_ret)
+        if inp_ret.function in self.events.keys():
+            if inp_ret.meta['code'] in self.events[inp_ret.function].keys():
+                event = self.events[inp_ret.function][inp_ret.meta['code']]
                 if event[0].lower() == 'prompt':
                     self.prompt(event[1])
+                    del self.events[inp_ret.function][inp_ret.meta['code']]
                 elif event[0].lower() == 'time_compare':
-                    self.logUpdate('System', f"{event[2]} took {inp_data.time-event[1]}s", '')
+                    self.logUpdate('System', f"{event[2]} took {inp_ret.time-event[1]}s", '')
+                    del self.events[inp_ret.function][inp_ret.meta['code']]
     
     def taskOrganize(self, ran_code):
         tim = datetime.now().strftime('%H:%M:%S.%f')[:-4]
@@ -370,23 +401,22 @@ class MyApp(QMainWindow):
             for X in range(self.colNum[Y]):
                 self.main_signal[Y][X].returnData.emit("")
         with open(f"./data/{code}_"+time.strftime("%Y%m%d_%H%M%S")+".txt","w") as sav:
-            sav.write(json.dumps(self.wholeData))
+            sav.write(json.dumps(self.wholeData, indent=4))
         with open(f"./data/{code}.txt","w") as sav:
-            sav.write(json.dumps(self.wholeData))
+            sav.write(json.dumps(self.wholeData, indent=4))
         self.logUpdate("Saved",time.strftime("%Y-%m-%d-%H:%M:%S"))
     
-    def requestConnect(self, inp_data):
-        y,x = self.nameSplitter(inp_data.name)
-        requestTo = random.randrange(len(self.main_signal[self.data_provider[y]]))
-        self.prompt(f"request {self.labels[self.data_provider[y]]}#{requestTo} {inp_data.name} {inp_data.meta['file_name']}")
-        self.logUpdate(inp_data.name, inp_data.log, gray)
+    def requestConnect(self, inp_ret):
+        y,x = self.nameSplitter(inp_ret.name)
+        requestTo = random.randrange(len(self.main_signal[self.syncData['data_provider'][y]]))
+        self.prompt(f"request {self.labels[self.syncData['data_provider'][y]]}#{requestTo} {inp_ret.name} {inp_ret.meta['file_name']}")
+        self.logUpdate(inp_ret.name, inp_ret.log, gray)
 
     def returnNum(self, a):
         for x in self.labels:
-            if a.lower() in [x.lower(), x[0].lower()]:
+            if a.lower() == x.lower() or a.lower() == x[0].lower():
                 return self.labels.index(x)
-        else:
-            return len(self.labels)+1
+        return len(self.labels)+1
 
     def nameSplitter(self, name):
         if "#" in name:
@@ -418,8 +448,54 @@ class MyApp(QMainWindow):
             return "None#0"
     
     def last_command(self):
-        if len(self.inputList) > 0:
-            self.commandText.setText(self.inputList[-1][1])
+        if len(self.inputList) >= abs(self.lastI + 1):
+            self.lastI += 1
+            self.commandText.setText(self.inputList[-self.lastI][1])
+    
+    def then_command(self):
+        if len(self.inputList) > abs(self.lastI - 1):
+            self.lastI -= 1
+            self.commandText.setText(self.inputList[-self.lastI][1])
+    
+    def publisher(self, inp_ret):
+        Y, x = self.nameSplitter(inp_ret.name)
+        target_layers = [syn for syn in self.syncData['sync'] if syn == Y]
+        for tY in target_layers:
+            for tX in range(self.colNum[tY]):
+                if not tX == x and tY == Y:
+                    ret = dataFormat("System", self.publisher.__name__)
+                    ret.meta['command'] = "acceptpublish"
+                    ret.meta['to'] = self.nameMaker(tY, tX)
+                    ret.meta['origin_t'] = inp_ret.time
+                    ret.meta['data'] = {}
+                    last_update = self.buttons[tY][tX].cellWidget(1, 0).last_update
+                    changes = [change for change in inp_ret.meta['edit_list'] if change[0] > last_update]
+                    if len(changes) > 0:
+                        changed_files = [change[1] for change in changes]
+                        setted_changes = list(set(changed_files))
+                        ret.meta['edit_list'] = changes
+                        for setted in setted_changes:
+                            if setted in inp_ret.meta['data'].keys():
+                                ret.meta['data'][setted] = inp_ret.meta['data'][setted]
+                            elif setted in inp_ret.meta['keys']:
+                                ret.meta['data'][setted] = self.buttons[tY][tX].cellWidget(1, 0).data[setted]
+                        ret.log = "Published sent to"+ret.meta['to']
+                        ret.time = time.time()
+                        self.main_signal[tY][tX].command.emit(ret)
+    
+    def syncer(self, inp_ret):
+        Y, x = self.nameSplitter(inp_ret.name)
+        if type(self.syncData['sync'][Y]) == int:
+            target_layer = self.syncData['sync'][Y]
+            requestTo = random.randrange(self.colNum[target_layer])
+            ret = dataFormat("System", self.syncer.__name__)
+            ret.meta['command'] = "returnsync"
+            ret.meta['from'] = inp_ret.name
+            ret.meta['to'] = self.nameMaker(target_layer, requestTo)
+            ret.meta['origin_t'] = inp_ret.time
+            ret.log = ret.meta['from']+" request sync to "+ret.meta['to']
+            ret.time = time.time()
+            self.main_signal[target_layer][requestTo].command.emit(ret)
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)

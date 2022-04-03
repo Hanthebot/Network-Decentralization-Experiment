@@ -1,0 +1,91 @@
+{
+    "table_data": {
+        "colNum": [
+            3,
+            4,
+            5,
+            6
+        ],
+        "permission": {
+            "self-request": 3,
+            "received": 3,
+            "request": 3,
+            "upload": 0,
+            "download": 0,
+            "returnsync": 3
+        },
+        "sync": {
+            "data_provider": [
+                0,
+                0,
+                0,
+                0
+            ],
+            "sync": [
+                0,
+                0,
+                false,
+                false
+            ],
+            "coworker_check": [
+                0,
+                false,
+                false,
+                false
+            ]
+        },
+        "labels": [
+            "Admin",
+            "Manager",
+            "Node",
+            "User"
+        ]
+    },
+    "cell_data": [
+        [
+            [],
+            [],
+            []
+        ],
+        [
+            [],
+            [],
+            [],
+            []
+        ],
+        [
+            [],
+            [],
+            [],
+            [],
+            []
+        ],
+        [
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+        ]
+    ],
+    "log_data": [],
+    "input_data": [],
+    "func_data": {
+        "upload": 0,
+        "request": 0,
+        "download": 0,
+        "up_and_down": 0,
+        "setname": 0,
+        "usage": 0,
+        "macroadd": 0,
+        "requestr": 0,
+        "requestrr": 0,
+        "clearlog": 0,
+        "help": 0,
+        "label": 0,
+        "a": 0,
+        "f": 0,
+        "save": 0
+    }
+}

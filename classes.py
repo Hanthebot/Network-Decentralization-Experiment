@@ -15,16 +15,17 @@ class dataFormat():
 class beepSignals(QObject):
     data = pyqtSignal(object)
     end = pyqtSignal(str)
-    request = pyqtSignal(object)
     returnData = pyqtSignal(object,object)
+    publish = pyqtSignal(object)
+    sync = pyqtSignal(object)
 
 class addSignal(QObject):
     add = pyqtSignal(int)
 
 class mainToSignal(QObject):
-    data = pyqtSignal(object)
     command = pyqtSignal(object)
     returnData = pyqtSignal(object)
+    active = pyqtSignal(bool)
 
 class underTable(QWidget):
     def __init__(self, x=0, y=0, permission={}, labels=[], sabotage=False):
@@ -32,18 +33,18 @@ class underTable(QWidget):
         self.x = x
         self.y = y
         self.paralyzed = False
-        self.born = time.time()
-        self.last_update = time.time()
+        self.born = 0
+        self.last_update = 0
         self.labels = labels
         self.permission = permission
-        for func in ["self-request", "receiveD", "request", "upload", "download"]:
+        for func in ["received", "request", "upload", "download", "returnsync"]:
             if func not in self.permission.keys():
                 self.permission[func] = len(self.labels) - 1
         self.name = self.nameMaker(self.y, self.x)
         self.layouta = QHBoxLayout()
-        self.nBtn1=QPushButton("A") #age
-        self.nBtn2=QPushButton("F") #send_keys
-        self.nBtn3=QPushButton("P") #Paralyze
+        self.nBtn1 = QPushButton("A") #age
+        self.nBtn2 = QPushButton("F") #send_keys
+        self.nBtn3 = QPushButton("P") #Paralyze
         for nnn in [self.nBtn1, self.nBtn2, self.nBtn3]:
             nnn.setMaximumHeight(20)
             nnn.setMinimumHeight(20)
@@ -56,13 +57,14 @@ class underTable(QWidget):
         self.setLayout(self.layouta)
         self.signals = beepSignals()
         self.data = {}
+        self.edit_list = []
     
     def nameMaker(self, y, x):
         return f"{self.labels[y]}_{x}"
     
     def btn1_clicked(self): #return age
         ret = dataFormat(self.name, self.btn1_clicked.__name__)
-        age = time.time()-self.born
+        age = time.time() - self.born
         ret.log = f"Age: {fo2(age)}s"
         ret.meta['born'] = self.born
         ret.meta['age'] = age
@@ -80,27 +82,6 @@ class underTable(QWidget):
         
     def btn3_clicked(self): #paralyze
         self.paralyzed = True
-        
-    def receiveD(self, inp_ret): #receive data
-        ret = dataFormat(self.name, self.receiveD.__name__)
-        if self.y <= self.permission[self.receiveD.__name__]:
-            if self.name == inp_ret.meta['to']:
-                file_name = inp_ret.meta['file_name']
-                self.data[file_name] = inp_ret.meta['data']
-                ret.meta['code'] = inp_ret.meta['code']
-                ret.log = f"{self.name} received {file_name} from {inp_ret.meta['from']}"
-                ret.time = time.time()
-                self.signals.data.emit(ret)
-                self.signals.end.emit(inp_ret.meta['code'])
-                self.last_update = time.time()
-            else:
-                ret.log = "Wrong address"
-                ret.time = time.time()
-                self.signals.data.emit(ret)
-        else:
-            ret.log = "No permission"
-            ret.time = time.time()
-            self.signals.data.emit(ret)
     
     def commandR(self, inp_ret): #others e.g. upload
         command = inp_ret.meta['command'].lower()
@@ -111,11 +92,14 @@ class underTable(QWidget):
                 with open(file_name, "rb") as f:
                     self.data[file_name] = f.read()
                 ret.meta['code'] = inp_ret.meta['code']
+                t = time.time()
+                self.last_update = t
+                self.edit_list.append([t, inp_ret.meta['file_name']])
+                self.publish(t, {file_name: self.data[file_name]})
                 ret.log = f"{file_name} uploaded successfully"
                 ret.time = time.time()
                 self.signals.end.emit(inp_ret.meta['code'])
                 self.signals.data.emit(ret)
-                self.last_update = time.time()
             else:
                 ret.log = "No permission"
                 ret.time = time.time()
@@ -144,18 +128,6 @@ class underTable(QWidget):
                 ret.log = "No permission"
                 ret.time = time.time()
                 self.signals.data.emit(ret)
-            
-        elif command == 'self-request': #useless?
-            if self.y <= self.permission[command.lower()]:
-                file_name = inp_ret.meta['file_name']
-                ret.meta['file_name'] = file_name
-                ret.log = f"Requested {file_name}"
-                ret.time = time.time()
-                self.signals.request.emit(ret) 
-            else:
-                ret.log = "No permission"
-                ret.time = time.time()
-                self.signals.data.emit(ret)
         
         elif command == 'download':        
             if self.y <= self.permission[command]:
@@ -177,6 +149,62 @@ class underTable(QWidget):
                 ret.log = "No permission"
                 ret.time = time.time()
                 self.signals.data.emit(ret)
+                
+        elif command == 'received':        
+            if self.y <= self.permission[command]:
+                if self.name == inp_ret.meta['to']:
+                    file_name = inp_ret.meta['file_name']
+                    self.data[file_name] = inp_ret.meta['data']
+                    ret.meta['code'] = inp_ret.meta['code']
+                    t = time.time()
+                    self.last_update = t
+                    self.edit_list.append([t, inp_ret.meta['file_name']])
+                    self.publish(t, {file_name: self.data[file_name]})
+                    ret.log = f"{self.name} received {file_name} from {inp_ret.meta['from']}"
+                    ret.time = time.time()
+                    self.signals.data.emit(ret)
+                    self.signals.end.emit(inp_ret.meta['code'])
+                else:
+                    ret.log = "Wrong address"
+                    ret.time = time.time()
+                    self.signals.data.emit(ret)
+            else:
+                ret.log = "No permission"
+                ret.time = time.time()
+                self.signals.data.emit(ret)
+            
+        elif command == 'returnsync':
+            ret.meta['from'] = self.name
+            ret.meta['to'] = inp_ret.meta['from']
+            ret.meta['data'] = self.data
+            ret.meta['origin_t'] = inp_ret.meta['origin_t']
+            ret.log = "Return for sync"
+            ret.time = time.time()
+            self.signals.data.emit(ret)
+            
+        elif command == 'acceptsync':
+            self.data = inp_ret.meta['data']
+            t = time.time()
+            self.last_update = t
+            self.edit_list.append([t, True])
+            self.publish(t)
+            ret.meta['origin_t'] = inp_ret.meta['origin_t']
+            ret.log = "Sync"
+            ret.time = t
+            self.signals.data.emit(ret)
+            
+        elif command == 'acceptpublish':
+            for dat in inp_ret.meta['data']:
+                self.data[dat] = inp_ret.meta['data']
+            for l in inp_ret.meta['edit_list']:
+                self.edit_list.append(l)
+            t = inp_ret.time
+            self.last_update = t
+            self.publish(t)
+            ret.meta['origin_t'] = inp_ret.meta['origin_t']
+            ret.log = "Accept publish"
+            ret.time = t
+            self.signals.data.emit(ret)
             
         else:
             ret.log = "No command found"
@@ -185,6 +213,24 @@ class underTable(QWidget):
     
     def returnData(self, etc=""): #to save
         self.signals.returnData.emit((self.y,self.x), self.data)
+    
+    def publish(self, t, dat={}):
+        ret = dataFormat(self.name, self.publish.__name__)
+        ret.meta['edit_list'] = self.edit_list
+        ret.meta['keys'] = self.data.keys()
+        ret.meta['data'] = dat
+        ret.log = "Published data"
+        ret.time = t
+        self.signals.publish.emit(ret)
+    
+    def activate(self, active):
+        if active:
+            self.born = time.time()
+            self.last_update = time.time()
+            ret = dataFormat(self.name, self.activate.__name__)
+            ret.log = "Initial sync request"
+            ret.time = time.time()
+            self.signals.sync.emit(ret)
 
 class cellTable(QTableWidget):
     def __init__(self):

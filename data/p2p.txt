@@ -1,8 +1,7 @@
 {
     "table_data": {
         "colNum": [
-            1,
-            4
+            5
         ],
         "permission": {
             "self-request": 3,
@@ -21,7 +20,7 @@
             ],
             "sync": [
                 0,
-                0,
+                false,
                 false,
                 false
             ],
