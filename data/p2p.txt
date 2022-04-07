@@ -1,7 +1,16 @@
 {
     "table_data": {
         "colNum": [
-            5
+            100
+        ],
+        "colNumSpe": [
+            [
+                6,
+                -94
+            ],
+            false,
+            false,
+            false
         ],
         "permission": {
             "self-request": 3,
@@ -9,7 +18,11 @@
             "request": 3,
             "upload": 0,
             "download": 0,
-            "returnsync": 3
+            "returnsync": 3,
+            "acceptsync": 3,
+            "acceptpublish": 3,
+            "btn1_clicked": 3,
+            "btn2_clicked": 3
         },
         "sync": {
             "data_provider": [
@@ -23,15 +36,6 @@
                 false,
                 false,
                 false
-            ],
-            "follower": [
-                [
-                    0,
-                    1
-                ],
-                false,
-                false,
-                false
             ]
         },
         "labels": [
@@ -40,5 +44,31 @@
             "Node",
             "User"
         ]
+    },
+    "func_data": {
+        "upload": 100,
+        "request": 0,
+        "download": 0,
+        "up_and_down": 0,
+        "requestr": 0,
+        "file": 0,
+        "setname": 0,
+        "usage": 0,
+        "macroadd": 0,
+        "requestrr": 0,
+        "uploadr": 0,
+        "uploadrx": 0,
+        "uploadrrx": 10,
+        "up_and_downrr": 0,
+        "up_and_downrrx": 0,
+        "repeat": 1,
+        "delay": 1,
+        "quantity": 0,
+        "clearlog": 0,
+        "help": 0,
+        "label": 0,
+        "a": 0,
+        "f": 0,
+        "save": 0
     }
 }

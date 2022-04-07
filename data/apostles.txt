@@ -2,36 +2,43 @@
     "table_data": {
         "colNum": [
             1,
-            3,
-            4
+            9,
+            90
+        ],
+        "colNumSpe": [
+            false,
+            [
+                3,
+                -6
+            ],
+            [
+                4,
+                -86
+            ],
+            false
         ],
         "permission": {
             "self-request": 3,
             "received": 3,
             "request": 3,
             "upload": 0,
-            "download": 0,
-            "returnsync": 3
+            "download": 3,
+            "returnsync": 3,
+            "acceptsync": 3,
+            "acceptpublish": 3,
+            "btn1_clicked": 3,
+            "btn2_clicked": 3
         },
         "sync": {
             "data_provider": [
                 0,
                 0,
-                1,
+                0,
                 0
             ],
             "sync": [
                 0,
                 0,
-                false,
-                false
-            ],
-            "follower": [
-                [
-                    0,
-                    1
-                ],
-                false,
                 false,
                 false
             ]
@@ -43,92 +50,25 @@
             "User"
         ]
     },
-    "cell_data": [
-        [
-            [
-                "./test_data/always.zip"
-            ]
-        ],
-        [
-            [
-                "./test_data/always.zip"
-            ],
-            [
-                "./test_data/always.zip"
-            ],
-            [
-                "./test_data/always.zip"
-            ]
-        ],
-        [
-            [],
-            [],
-            [],
-            []
-        ]
-    ],
-    "log_data": [
-        [
-            "00:45:38.68",
-            "Prompt",
-            "upload a#0 './test_data/always.zip' fed -t"
-        ],
-        [
-            "00:45:38.68",
-            "Admin_0",
-            "./test_data/always.zip uploaded successfully"
-        ],
-        [
-            "00:45:38.68",
-            "System",
-            "fed took 0.000980377197265625s"
-        ],
-        [
-            "00:45:42.14",
-            "Manager_2",
-            "Files: ./test_data/always.zip"
-        ],
-        [
-            "00:45:43.69",
-            "Manager_1",
-            "Files: ./test_data/always.zip"
-        ],
-        [
-            "00:45:44.60",
-            "Manager_0",
-            "Files: ./test_data/always.zip"
-        ],
-        [
-            "00:46:24.83",
-            "Prompt",
-            "requestr n#1 './test_data/always.zip'"
-        ],
-        [
-            "00:46:24.83",
-            "System",
-            "Invalid syntax: try usage"
-        ]
-    ],
-    "input_data": [
-        [
-            "00:45:38.67",
-            "upload a#0 \"./test_data/always.zip\" fed -t"
-        ],
-        [
-            "00:46:24.83",
-            "requestr n#1 \"./test_data/always.zip\""
-        ]
-    ],
     "func_data": {
-        "upload": 1,
-        "request": 0,
+        "upload": 100,
+        "request": 100,
         "download": 0,
-        "up_and_down": 0,
+        "up_and_down": 100,
+        "requestr": 0,
+        "file": 0,
         "setname": 0,
         "usage": 0,
         "macroadd": 0,
-        "requestr": 1,
         "requestrr": 0,
+        "uploadr": 0,
+        "uploadrx": 0,
+        "uploadrrx": 0,
+        "up_and_downrr": 0,
+        "up_and_downrrx": 10,
+        "repeat": 1,
+        "delay": 1,
+        "quantity": 0,
         "clearlog": 0,
         "help": 0,
         "label": 0,

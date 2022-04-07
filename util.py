@@ -43,6 +43,9 @@ def splitQS(a): #split quotes and space
             l[-1] += A
     return l
 
+def joinQS(lis): #split quotes and space
+    return " ".join(["\""+l+"\"" if " " in l else l for l in lis])
+
 def rand6(length=6):
     chars = string.digits
     rand =  ''.join(random.choice(chars) for _ in range(length))

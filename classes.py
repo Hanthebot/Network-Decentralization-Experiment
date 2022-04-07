@@ -28,7 +28,7 @@ class mainToSignal(QObject):
     active = pyqtSignal(bool)
 
 class underTable(QWidget):
-    def __init__(self, x=0, y=0, permission={}, labels=[], sabotage=False):
+    def __init__(self, x=0, y=0, permission={}, labels=[], sabotage=False, code_num=False):
         super().__init__()
         self.x = x
         self.y = y
@@ -37,10 +37,11 @@ class underTable(QWidget):
         self.last_update = 0
         self.labels = labels
         self.permission = permission
-        for func in ["received", "request", "upload", "download", "returnsync"]:
+        for func in ["received", "request", "upload", "download", "returnsync", "acceptsync", "acceptpublish", "btn1_clicked", "btn2_clicked"]:
             if func not in self.permission.keys():
                 self.permission[func] = len(self.labels) - 1
         self.name = self.nameMaker(self.y, self.x)
+        self.birth_code = code_num
         self.layouta = QHBoxLayout()
         self.nBtn1 = QPushButton("A") #age
         self.nBtn2 = QPushButton("F") #send_keys
@@ -75,6 +76,7 @@ class underTable(QWidget):
     def btn2_clicked(self): #get file names
         ret = dataFormat(self.name, self.btn2_clicked.__name__)
         keys = list(self.data.keys())
+        ret.meta['files'] = keys
         ret.log = f"Files: {', '.join(keys)}"
         ret.meta['files'] = keys
         ret.time = time.time()
@@ -92,10 +94,11 @@ class underTable(QWidget):
                 with open(file_name, "rb") as f:
                     self.data[file_name] = f.read()
                 ret.meta['code'] = inp_ret.meta['code']
+                ret.meta['origin_t'] = inp_ret.time
                 t = time.time()
                 self.last_update = t
                 self.edit_list.append([t, inp_ret.meta['file_name']])
-                self.publish(t, {file_name: self.data[file_name]})
+                self.publish(t, {file_name: self.data[file_name]}, code=inp_ret.meta['code'])
                 ret.log = f"{file_name} uploaded successfully"
                 ret.time = time.time()
                 self.signals.end.emit(inp_ret.meta['code'])
@@ -113,10 +116,10 @@ class underTable(QWidget):
                     ret.log = f"Return {file_name}"
                     ret.meta['file_name'] = file_name
                     ret.meta['data'] = self.data[file_name]
+                    ret.meta['code'] = inp_ret.meta['code']
                     #ret.meta['original'] = inp_ret #retweet
                     ret.meta['from'] = self.name
                     ret.meta['to'] = inp_ret.meta['from']
-                    ret.meta['code'] = inp_ret.meta['code']
                     ret.time = time.time()
                     self.signals.end.emit(inp_ret.meta['code'])
                     self.signals.data.emit(ret)
@@ -159,7 +162,7 @@ class underTable(QWidget):
                     t = time.time()
                     self.last_update = t
                     self.edit_list.append([t, inp_ret.meta['file_name']])
-                    self.publish(t, {file_name: self.data[file_name]})
+                    self.publish(t, {file_name: self.data[file_name]}, code=inp_ret.meta['code'])
                     ret.log = f"{self.name} received {file_name} from {inp_ret.meta['from']}"
                     ret.time = time.time()
                     self.signals.data.emit(ret)
@@ -177,33 +180,39 @@ class underTable(QWidget):
             ret.meta['from'] = self.name
             ret.meta['to'] = inp_ret.meta['from']
             ret.meta['data'] = self.data
-            ret.meta['origin_t'] = inp_ret.meta['origin_t']
+            ret.meta['last_update'] = self.last_update
+            ret.meta['code'] = inp_ret.meta['code']
             ret.log = "Return for sync"
             ret.time = time.time()
             self.signals.data.emit(ret)
             
         elif command == 'acceptsync':
             self.data = inp_ret.meta['data']
-            t = time.time()
-            self.last_update = t
-            self.edit_list.append([t, True])
-            self.publish(t)
-            ret.meta['origin_t'] = inp_ret.meta['origin_t']
+            self.last_update = inp_ret.meta['last_update']
+            ret.meta['code'] = inp_ret.meta['code']
+            self.edit_list.append([self.last_update, True])
+            self.publish(self.last_update, code=inp_ret.meta['code'])
             ret.log = "Sync"
-            ret.time = t
+            ret.time = time.time()
             self.signals.data.emit(ret)
             
         elif command == 'acceptpublish':
             for dat in inp_ret.meta['data']:
-                self.data[dat] = inp_ret.meta['data']
+                self.data[dat] = inp_ret.meta['data'][dat]
             for l in inp_ret.meta['edit_list']:
                 self.edit_list.append(l)
-            t = inp_ret.time
-            self.last_update = t
-            self.publish(t)
-            ret.meta['origin_t'] = inp_ret.meta['origin_t']
+            self.last_update = inp_ret.meta['last_update']
+            ret.meta['last_update'] = inp_ret.meta['last_update']
+            self.publish(self.last_update, code=inp_ret.meta['code'])
             ret.log = "Accept publish"
-            ret.time = t
+            ret.time = time.time()
+            self.signals.data.emit(ret)
+            
+        elif command == 'file':
+            keys = list(self.data.keys())
+            ret.meta['files'] = keys
+            ret.log = f"Files: {', '.join(keys)}"
+            ret.time = time.time()
             self.signals.data.emit(ret)
             
         else:
@@ -214,11 +223,13 @@ class underTable(QWidget):
     def returnData(self, etc=""): #to save
         self.signals.returnData.emit((self.y,self.x), self.data)
     
-    def publish(self, t, dat={}):
+    def publish(self, t, dat={}, code=False):
         ret = dataFormat(self.name, self.publish.__name__)
         ret.meta['edit_list'] = self.edit_list
         ret.meta['keys'] = self.data.keys()
         ret.meta['data'] = dat
+        ret.meta['code'] = code
+        ret.meta['last_update'] = self.last_update
         ret.log = "Published data"
         ret.time = t
         self.signals.publish.emit(ret)
@@ -226,8 +237,9 @@ class underTable(QWidget):
     def activate(self, active):
         if active:
             self.born = time.time()
-            self.last_update = time.time()
+            self.last_update = 0
             ret = dataFormat(self.name, self.activate.__name__)
+            ret.meta['code'] = self.birth_code
             ret.log = "Initial sync request"
             ret.time = time.time()
             self.signals.sync.emit(ret)
@@ -261,6 +273,24 @@ class cellCol(QTableWidgetItem):
         self.setForeground(QBrush(QColor(0, 0, 0)))
 
 class addBtnClass(QPushButton):
+    def __init__(self, number):
+        super().__init__("+")
+        self.num = number
+        self.font=QFont()
+        self.font.setPointSize(25)
+        self.setFont(self.font)
+        self.setMinimumWidth(60)
+        self.setMinimumHeight(60)
+        self.setMaximumWidth(60)
+        self.setMaximumHeight(60)
+        self.setStyleSheet("background-color: gray; color: white; border: none;")
+        self.addSignal = addSignal()
+        self.clicked.connect(self.add)
+    
+    def add(self):
+        self.addSignal.add.emit(self.num)
+
+class pseudo(QPushButton):
     def __init__(self, number):
         super().__init__("+")
         self.num = number
