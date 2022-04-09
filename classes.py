@@ -203,6 +203,7 @@ class underTable(QWidget):
                 self.edit_list.append(l)
             self.last_update = inp_ret.meta['last_update']
             ret.meta['last_update'] = inp_ret.meta['last_update']
+            ret.meta['code'] = inp_ret.meta['code']
             self.publish(self.last_update, code=inp_ret.meta['code'])
             ret.log = "Accept publish"
             ret.time = time.time()

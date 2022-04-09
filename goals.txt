@@ -1,0 +1,12 @@
+PF: delay 5 repeat 10 up_and_downrr [lowest layer] "./test_data/calculus.pdf" maxima -t 5
+PF-p2p: delay 5 repeat 10 uploadr a "./test_data/calculus.pdf" maxima -t 5
+
+RS-upload: delay 2 uploadrrx [uploading layer] "./test_data/calculus.pdf" maxima -t
+RS-download: uploadr a "./test_data/calculus.pdf"
+delay 2 requestrrx n "./test_data/calculus.pdf" maxima -t
+
+PS: uploadrx a "./test_data/calculus.pdf"
+macroadd [lowest] 100 -t
+*repeat by hand
+
+delay 2 uploadrx a "./test_data/calculus.pdf"

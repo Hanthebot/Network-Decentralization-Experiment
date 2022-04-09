@@ -70,6 +70,7 @@ class MyApp(QMainWindow):
             "usage": ["return usage","usage [command/all]"],
             "macroadd": ["add certain number of cells","macroadd [layer name] [quantity]"],
             "requestrr": ["request from random cell in requesting layer to random cell in target layer","requestrr [target layer name] [requesting layer name]"],
+            "requestrrx": ["request from random cell in requesting layer to random cell in target layer","requestrr [target layer name] [requesting layer name]"],
             "uploadr": ["request from random cell in requesting layer to random cell in target layer","uploadr [target layer name] [file name] [code = random]"],
             "uploadrx": ["request from random cell in requesting layer to random cell in target layer","uploadr [target layer name] [file name] [code = random]"],
             "uploadrrx": ["request from random cell in requesting layer to random cell in target layer","uploadr [target layer name] [file name] [code = random]"],
@@ -154,6 +155,7 @@ class MyApp(QMainWindow):
         self.A.addWidget(self.commandText)
         QShortcut(Qt.Key_Up, self, self.last_command)
         QShortcut(Qt.Key_Down, self, self.then_command)
+        QShortcut(QKeySequence("Escape"), self, activated = self.esc)
         
         self.scrollWidth = 250
         self.Btn = QPushButton("refresh", self)
@@ -162,8 +164,7 @@ class MyApp(QMainWindow):
         self.BtnS = QPushButton("save", self)
         self.BtnS.clicked.connect(self.save)
         self.BtnS.setMaximumWidth(self.scrollWidth)
-        shortcut = QShortcut(QKeySequence("Ctrl+S"), self)
-        shortcut.activated.connect(self.save)
+        shortcut = QShortcut(QKeySequence("Ctrl+S"), self, activated = self.save)
         self.scrollArea = QScrollArea()
         #self.scrollArea.setMaximumWidth(self.scrollWidth)
         self.scrollArea.setWidgetResizable(True)
@@ -369,9 +370,14 @@ class MyApp(QMainWindow):
                     request_layer = self.returnNum(cwords[1])
                     target_layer = self.syncData['data_provider'][request_layer]
                     file_name = cwords[2]
-                    requestTo = random.randrange(self.colNum[target_layer])
-                    requestFrom = random.randrange(self.colNum[request_layer])
-                    self.prompt(f"request {self.nameMaker(target_layer, requestTo)} {self.nameMaker(request_layer, requestFrom)} {joinQS(cwordsO[2:])} -q")
+                    ran_code = self.returnCode(command) if len(cwords) <= 3 else cwords[3]
+                    tiX = 10
+                    if tDash:
+                        self.events["received"][ran_code] = ['list', 'compare', tStart, tiX, ran_code, 0]
+                    for i in range(tiX):
+                        requestTo = random.randrange(self.colNum[target_layer])
+                        requestFrom = random.randrange(self.colNum[request_layer])
+                        self.prompt(f"request {self.nameMaker(target_layer, requestTo)} {self.nameMaker(request_layer, requestFrom)} {file_name} {ran_code} -q")
                 
                 elif command == 'up_and_downrr':
                     request_layer = self.returnNum(cwords[1])
@@ -399,7 +405,7 @@ class MyApp(QMainWindow):
                     file_name = cwords[2]
                     ran_code = self.returnCode(command) if len(cwords) <= 3 else cwords[3]
                     tiX = 10
-                    c = sum([self.colNum[syn] for syn in self.syncData['sync'] if syn == target_layer])
+                    c = sum([self.colNum[syn] for syn in range(len(self.colNum)) if self.syncData['sync'][syn] == target_layer and type(self.syncData['sync'][syn]) == int])
                     if tDash:
                         self.events["publisher"][ran_code] = ['list', 'compare', tStart, tiX*c, ran_code, 0]
                     for i in range(tiX):
@@ -421,7 +427,7 @@ class MyApp(QMainWindow):
                     requestTo = random.randrange(self.colNum[target_layer])
                     if tDash:
                         self.events["publisher"][ran_code2] = ['list', 'compare', tStart, 100, ran_code2, 0]
-                    self.events["upload"][ran_code] = ['arrival', 'prompt', f"macroadd {self.labels[len(self.colNum)-1]} 100 {ran_code2} -q"]
+                    self.events["upload"][ran_code] = ['arrival', 'prompt', f"macroadd {self.labels[len(self.colNum)-1]} 100 {ran_code2} -t"]
                     self.prompt(f"upload {self.nameMaker(target_layer, requestTo)} {file_name} {ran_code} -q")
                 
                 elif command == 'quantity':
@@ -438,13 +444,16 @@ class MyApp(QMainWindow):
                     x = int(cwords[1])
                     repeated_command = joinQS(cwordsO[2:-1])
                     for r in range(x - 1):
+                        self.logUpdate("System", str(r+1), gray)
                         self.prompt(repeated_command)
                         print("\n")
                         time.sleep(float(cwords[-1]))
+                    self.logUpdate("System", str(x), gray)
                     self.prompt(repeated_command)
                 
                 elif command == 'delay':
                     x = float(cwords[1])
+                    time.sleep(x)
                     self.logUpdate("System", "", gray)
                     repeated_command = joinQS(cwordsO[2:])
                     self.prompt(repeated_command)
@@ -564,8 +573,8 @@ class MyApp(QMainWindow):
                 self.main_signal[Y][X].returnData.emit("")
         with open(f"./data/{code}_"+time.strftime("%Y%m%d_%H%M%S")+".txt","w") as sav:
             sav.write(json.dumps(self.wholeData, indent=4))
-        with open(f"./data/{code}.txt","w") as sav:
-            sav.write(json.dumps(self.wholeData, indent=4))
+        """with open(f"./data/{code}.txt","w") as sav:
+            sav.write(json.dumps(self.wholeData, indent=4))"""
         self.logUpdate("Saved",time.strftime("%Y-%m-%d-%H:%M:%S"))
     
     def requestConnect(self, inp_ret):
@@ -621,19 +630,19 @@ class MyApp(QMainWindow):
     
     def publisher(self, inp_ret):
         Y, x = self.nameSplitter(inp_ret.name)
-        target_layers = [syn for syn in self.syncData['sync'] if syn == Y]
+        target_layers = [syn for syn in range(len(self.colNum)) if self.syncData['sync'][syn] == Y and type(self.syncData['sync'][syn]) == int]
         for tY in target_layers:
             for tX in range(self.colNum[tY]):
-                if not tX == x and tY == Y:
-                    ret = dataFormat("System", self.publisher.__name__)
-                    ret.meta['command'] = "acceptpublish"
-                    ret.meta['to'] = self.nameMaker(tY, tX)
-                    ret.meta['data'] = {}
-                    ret.meta['code'] = inp_ret.meta['code']
-                    ret.meta['last_update'] = inp_ret.meta['last_update']
+                if not (tX == x and tY == Y):
                     last_update = self.buttons[tY][tX].cellWidget(1, 0).last_update
                     changes = [change for change in inp_ret.meta['edit_list'] if change[0] > last_update]
                     if len(changes) > 0:
+                        ret = dataFormat("System", self.publisher.__name__)
+                        ret.meta['command'] = "acceptpublish"
+                        ret.meta['to'] = self.nameMaker(tY, tX)
+                        ret.meta['data'] = {}
+                        ret.meta['code'] = inp_ret.meta['code']
+                        ret.meta['last_update'] = inp_ret.meta['last_update']
                         changed_files = [change[1] for change in changes]
                         setted_changes = list(set(changed_files))
                         ret.meta['edit_list'] = changes
@@ -676,6 +685,9 @@ class MyApp(QMainWindow):
             ret.log = f"Blank sync"
             ret.time = time.time()
             self.main_signal[Y][x].command.emit(ret)
+        
+    def esc(self):
+        sys.exit()
             
 
 if __name__ == '__main__':
