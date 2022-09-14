@@ -2,7 +2,7 @@ from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLa
 from PyQt5.QtGui import QFont, QColor, QBrush, QKeySequence
 from PyQt5.QtCore import Qt, QObject, pyqtSignal
 import time
-from util import *
+from util import mkIfNone, fo, fo2, fo3, fo4, fo5, fo6, splitQS, joinQS, rand6
 
 class dataFormat():
     def __init__(self, name='', function='', log='', t=0):
